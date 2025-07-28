@@ -16,6 +16,12 @@ A high-performance, production-ready Yahoo Finance data service built with Rust.
 - **📊 Advanced Analytics**: Statistical analysis, volatility calculations, price metrics
 - **🔄 Real-time Data**: Live market data with intelligent caching strategies
 
+<details>
+  <summary>Show Web Interface</summary>
+
+  <img width="847" height="1072" alt="image" src="https://github.com/user-attachments/assets/fe837731-43a7-4274-8415-209c65ffee9c" />
+</details>
+
 ### Web Interface (Optional)
 - **🖥️ Professional Dashboard**: Interactive web interface for financial analysis
 - **📈 Advanced Charting**: Candlestick charts, technical indicators, multiple timeframes
