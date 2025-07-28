@@ -3,13 +3,13 @@ name = "mango-data-service"
 version = "0.1.0"
 edition = "2021"
 description = "High-performance Yahoo Finance data service with advanced optimizations including zero-copy operations, concurrent caching, and intelligent rate limiting"
-authors = ["Your Name <your.email@example.com>"]
+authors = ["Alex"]
 license = "MIT"
-repository = "https://github.com/yourusername/mango-data-service"
+repository = "https://github.com/coqui123/Panterace"
 keywords = ["finance", "yahoo", "api", "data", "rust"]
 categories = ["api-bindings", "web-programming::http-server"]
 readme = "README.md"
-homepage = "https://github.com/yourusername/mango-data-service"
+homepage = "https://github.com/coqui123/Pantera"
 
 [dependencies]
 # Async runtime
