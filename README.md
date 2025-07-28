@@ -20,6 +20,10 @@ A high-performance, production-ready Yahoo Finance data service built with Rust.
   <summary>Show Web Interface</summary>
 
   <img width="847" height="1072" alt="image" src="https://github.com/user-attachments/assets/fe837731-43a7-4274-8415-209c65ffee9c" />
+  <img width="833" height="668" alt="image" src="https://github.com/user-attachments/assets/185f45c9-9c8a-4f89-a8fd-20512227b8d0" />
+  <img width="825" height="1057" alt="image" src="https://github.com/user-attachments/assets/d82bc380-a838-4aed-862e-f81d779fbdd0" />
+  <img width="827" height="1182" alt="image" src="https://github.com/user-attachments/assets/93329f95-5e61-4833-a7a1-0ed51311c0c5" />
+  <img width="823" height="618" alt="image" src="https://github.com/user-attachments/assets/1c3e5638-c710-406b-a88f-1a6eb38ef634" />
 </details>
 
 ### Web Interface (Optional)
