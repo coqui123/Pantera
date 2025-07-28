@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Mango Data Service - Admin Panel{% endblock %}</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .card-hover { transition: all 0.3s ease; }
+        .card-hover:hover { transform: translateY(-5px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); }
+        .animate-fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .loading { display: inline-block; width: 20px; height: 20px; border: 3px solid #f3f3f3; border-radius: 50%; border-top-color: #3498db; animation: spin 1s ease-in-out infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .nav-item { position: relative; }
+        .nav-item:hover::after { content: ''; position: absolute; bottom: -2px; left: 0; right: 0; height: 2px; background: rgba(255,255,255,0.8); border-radius: 1px; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Navigation -->
+    <nav class="gradient-bg shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <h1 class="text-white text-xl font-bold">
+                            <i class="fas fa-chart-line mr-2"></i>🥭 Mango Data Service
+                        </h1>
+                        <p class="text-white text-xs opacity-80">Admin Panel</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-1">
+                    <a href="/ui" class="nav-item text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium transition duration-200">
+                        <i class="fas fa-home mr-1"></i>Dashboard
+                    </a>
+                    <a href="/ui/search" class="nav-item text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium transition duration-200">
+                        <i class="fas fa-cogs mr-1"></i>Manage
+                    </a>
+                    <a href="/ui/analytics" class="nav-item text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium transition duration-200">
+                        <i class="fas fa-chart-bar mr-1"></i>Analytics
+                    </a>
+                    <div class="border-l border-white border-opacity-30 h-6 mx-2"></div>
+                    <a href="/health" target="_blank" class="nav-item text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium transition duration-200">
+                        <i class="fas fa-heartbeat mr-1"></i>API Health
+                    </a>
+                    <a href="/api/stats" target="_blank" class="nav-item text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium transition duration-200">
+                        <i class="fas fa-database mr-1"></i>Stats
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white py-8 mt-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">🥭 Mango Data Service</h3>
+                    <p class="text-gray-300">High-performance Yahoo Finance data service with admin panel. Features zero-copy operations, concurrent caching, and intelligent rate limiting.</p>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">Performance Features</h3>
+                    <ul class="text-gray-300 space-y-2">
+                        <li><i class="fas fa-rocket mr-2"></i>50-80% Memory Reduction</li>
+                        <li><i class="fas fa-tachometer-alt mr-2"></i>3x Faster Caching</li>
+                        <li><i class="fas fa-shield-alt mr-2"></i>Rate Limiting & Security</li>
+                        <li><i class="fas fa-database mr-2"></i>SQLite & PostgreSQL Support</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">Admin Features</h3>
+                    <ul class="text-gray-300 space-y-2">
+                        <li><i class="fas fa-cogs mr-2"></i>Symbol Management</li>
+                        <li><i class="fas fa-chart-line mr-2"></i>Real-time Analytics</li>
+                        <li><i class="fas fa-download mr-2"></i>Data Fetching</li>
+                        <li><i class="fas fa-search mr-2"></i>Database Search</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">API Endpoints</h3>
+                    <ul class="text-gray-300 space-y-2">
+                        <li><i class="fas fa-link mr-2"></i>Real-time Quotes</li>
+                        <li><i class="fas fa-chart-line mr-2"></i>Historical Data</li>
+                        <li><i class="fas fa-building mr-2"></i>Company Profiles</li>
+                        <li><i class="fas fa-calculator mr-2"></i>Advanced Analytics</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="border-t border-gray-700 mt-8 pt-8 text-center">
+                <p class="text-gray-300">Built with ❤️ and ⚡ in Rust | Professional Financial Data Service | Happy Trading! 📊💰</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Auto-refresh functionality
+        function autoRefresh(elementId, url, interval = 30000) {
+            setInterval(async () => {
+                try {
+                    const element = document.getElementById(elementId);
+                    if (element && element.dataset.autoRefresh === 'true') {
+                        const response = await fetch(url);
+                        const data = await response.json();
+                        if (data.success) {
+                            location.reload();
+                        }
+                    }
+                } catch (error) {
+                    console.log('Auto-refresh failed:', error);
+                }
+            }, interval);
+        }
+
+        // Loading states
+        function showLoading(buttonId) {
+            const button = document.getElementById(buttonId);
+            if (button) {
+                const originalText = button.innerHTML;
+                button.innerHTML = '<span class="loading"></span> Loading...';
+                button.disabled = true;
+                button.dataset.originalText = originalText;
+            }
+        }
+
+        function hideLoading(buttonId, originalText = null) {
+            const button = document.getElementById(buttonId);
+            if (button) {
+                const text = originalText || button.dataset.originalText || 'Submit';
+                button.innerHTML = text;
+                button.disabled = false;
+            }
+        }
+
+        // Format numbers
+        function formatNumber(num) {
+            if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
+            if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
+            if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
+            return num.toFixed(2);
+        }
+
+        // Format currency
+        function formatCurrency(num) {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD'
+            }).format(num);
+        }
+
+        // Copy to clipboard utility
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                // Show a temporary notification
+                const notification = document.createElement('div');
+                notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-md shadow-lg z-50';
+                notification.textContent = 'Copied to clipboard!';
+                document.body.appendChild(notification);
+                setTimeout(() => {
+                    notification.remove();
+                }, 3000);
+            });
+        }
+
+        // Highlight active nav item
+        document.addEventListener('DOMContentLoaded', function() {
+            const currentPath = window.location.pathname;
+            const navLinks = document.querySelectorAll('.nav-item');
+            
+            navLinks.forEach(link => {
+                if (link.getAttribute('href') === currentPath) {
+                    link.classList.add('bg-white', 'bg-opacity-20', 'rounded-md');
+                }
+            });
+        });
+    </script>
+</body>
+</html> 

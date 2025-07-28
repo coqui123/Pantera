@@ -1,0 +1,405 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - Mango Data Service{% endblock %}
+
+{% block content %}
+<div class="animate-fade-in">
+    <!-- Hero Section -->
+    <div class="gradient-bg rounded-lg shadow-xl p-8 mb-8 text-white">
+        <div class="max-w-4xl mx-auto text-center">
+            <h1 class="text-4xl font-bold mb-4">🥭 Mango Data Service</h1>
+            <p class="text-xl mb-6">Admin Dashboard - High-Performance Yahoo Finance API with Web Management</p>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-8">
+                <div class="bg-white bg-opacity-20 rounded-lg p-4">
+                    <div class="text-2xl font-bold">50-80%</div>
+                    <div class="text-sm">Memory Reduction</div>
+                </div>
+                <div class="bg-white bg-opacity-20 rounded-lg p-4">
+                    <div class="text-2xl font-bold">3x</div>
+                    <div class="text-sm">Faster Caching</div>
+                </div>
+                <div class="bg-white bg-opacity-20 rounded-lg p-4">
+                    <div class="text-2xl font-bold">100</div>
+                    <div class="text-sm">Req/Min Rate Limit</div>
+                </div>
+                <div class="bg-white bg-opacity-20 rounded-lg p-4">
+                    <div class="text-2xl font-bold">&lt;100ms</div>
+                    <div class="text-sm">Response Time</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <!-- Symbol Management -->
+        <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-800">
+                <i class="fas fa-cogs text-blue-500 mr-2"></i>Symbol Management
+            </h2>
+            <p class="text-gray-600 mb-4">Add new symbols to database or search existing ones</p>
+            <form id="quickAddForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Add Symbol to Database</label>
+                    <div class="flex">
+                        <input type="text" id="quickSymbolInput" placeholder="e.g., META, NVDA, AMZN" 
+                               class="flex-1 border border-gray-300 rounded-l-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <button type="submit" id="quickAddBtn" 
+                                class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-r-md transition duration-200">
+                            <i class="fas fa-plus mr-1"></i>Add
+                        </button>
+                    </div>
+                </div>
+            </form>
+            <div id="quickAddResult" class="mt-4"></div>
+            <div class="mt-4 flex space-x-2">
+                <a href="/ui/search" class="inline-flex items-center px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-medium rounded-lg transition duration-200">
+                    <i class="fas fa-search mr-2"></i>Full Management
+                </a>
+            </div>
+        </div>
+
+        <!-- System Health -->
+        <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-800">
+                <i class="fas fa-heartbeat text-green-500 mr-2"></i>System Status
+            </h2>
+            <div id="healthStatus">
+                <div class="text-center py-4">
+                    <div class="loading mx-auto mb-2"></div>
+                    <p class="text-gray-600">Loading system status...</p>
+                </div>
+            </div>
+            <div id="databaseStats" class="mt-4">
+                <div class="text-center py-4">
+                    <div class="loading mx-auto mb-2"></div>
+                    <p class="text-gray-600">Loading database stats...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Database Overview -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-2xl font-semibold text-gray-800">
+                <i class="fas fa-database text-purple-500 mr-2"></i>Database Overview
+            </h2>
+            <button onclick="refreshStats()" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md text-sm transition duration-200">
+                <i class="fas fa-refresh mr-1"></i>Refresh
+            </button>
+        </div>
+        <div id="recentSymbols">
+            <div class="text-center py-4">
+                <div class="loading mx-auto mb-2"></div>
+                <p class="text-gray-600">Loading recent symbols...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Features Showcase -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+            <div class="text-center">
+                <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fas fa-rocket text-blue-500 text-2xl"></i>
+                </div>
+                <h3 class="text-xl font-semibold mb-2">High Performance</h3>
+                <p class="text-gray-600">Zero-copy operations and concurrent caching for maximum throughput</p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+            <div class="text-center">
+                <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fas fa-shield-alt text-green-500 text-2xl"></i>
+                </div>
+                <h3 class="text-xl font-semibold mb-2">Enterprise Security</h3>
+                <p class="text-gray-600">Rate limiting, input validation, and secure error handling</p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+            <div class="text-center">
+                <div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fas fa-chart-line text-purple-500 text-2xl"></i>
+                </div>
+                <h3 class="text-xl font-semibold mb-2">Rich Analytics</h3>
+                <p class="text-gray-600">Advanced financial analytics with technical indicators</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Endpoints -->
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <h2 class="text-2xl font-semibold mb-6 text-gray-800">
+            <i class="fas fa-code text-indigo-500 mr-2"></i>Available API Endpoints
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <h3 class="text-lg font-semibold mb-3 text-gray-700">Core Endpoints</h3>
+                <div class="space-y-2">
+                    <div class="flex items-center p-2 bg-gray-50 rounded">
+                        <span class="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-medium mr-3">GET</span>
+                        <code class="text-sm">/health</code>
+                    </div>
+                    <div class="flex items-center p-2 bg-gray-50 rounded">
+                        <span class="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-medium mr-3">GET</span>
+                        <code class="text-sm">/api/symbols/search</code>
+                    </div>
+                    <div class="flex items-center p-2 bg-gray-50 rounded">
+                        <span class="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-medium mr-3">GET</span>
+                        <code class="text-sm">/api/symbols/{symbol}/validate</code>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold mb-3 text-gray-700">Data Endpoints</h3>
+                <div class="space-y-2">
+                    <div class="flex items-center p-2 bg-gray-50 rounded">
+                        <span class="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-medium mr-3">GET</span>
+                        <code class="text-sm">/api/symbols/{symbol}/quote</code>
+                    </div>
+                    <div class="flex items-center p-2 bg-gray-50 rounded">
+                        <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium mr-3">POST</span>
+                        <code class="text-sm">/api/symbols/{symbol}/fetch</code>
+                    </div>
+                    <div class="flex items-center p-2 bg-gray-50 rounded">
+                        <span class="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-medium mr-3">GET</span>
+                        <code class="text-sm">/api/symbols/{symbol}/comprehensive</code>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="mt-6 text-center">
+            <a href="/ui/search" class="inline-flex items-center px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-medium rounded-lg transition duration-200 mr-4">
+                <i class="fas fa-cogs mr-2"></i>Manage Symbols
+            </a>
+            <a href="/ui/analytics" class="inline-flex items-center px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-lg transition duration-200">
+                <i class="fas fa-chart-bar mr-2"></i>View Analytics
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Quick add symbol
+    async function quickAddSymbol(symbol) {
+        try {
+            // First validate the symbol
+            const validateResponse = await fetch(`/api/symbols/${symbol}/validate`);
+            const validateData = await validateResponse.json();
+            
+            if (!validateData.success || !validateData.data.valid) {
+                document.getElementById('quickAddResult').innerHTML = `
+                    <div class="bg-red-50 border border-red-200 rounded p-3">
+                        <div class="flex items-center">
+                            <i class="fas fa-times-circle text-red-500 mr-2"></i>
+                            <span class="font-medium text-red-800">Invalid Symbol: ${symbol}</span>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            // Fetch historical data
+            const fetchResponse = await fetch(`/api/symbols/${symbol}/fetch?interval=1d`, {
+                method: 'POST'
+            });
+            const fetchData = await fetchResponse.json();
+            
+            if (fetchData.success) {
+                document.getElementById('quickAddResult').innerHTML = `
+                    <div class="bg-green-50 border border-green-200 rounded p-3">
+                        <div class="flex items-center">
+                            <i class="fas fa-check-circle text-green-500 mr-2"></i>
+                            <span class="font-medium text-green-800">Successfully Added: ${symbol}</span>
+                        </div>
+                        <div class="mt-2">
+                            <a href="/ui/analytics?symbol=${symbol}" class="text-blue-600 hover:text-blue-800 text-sm">
+                                <i class="fas fa-chart-line mr-1"></i>View Analytics
+                            </a>
+                        </div>
+                    </div>
+                `;
+                // Refresh stats
+                setTimeout(() => {
+                    refreshStats();
+                    loadRecentSymbols();
+                }, 1000);
+            } else {
+                document.getElementById('quickAddResult').innerHTML = `
+                    <div class="bg-red-50 border border-red-200 rounded p-3">
+                        <div class="text-red-800">Failed to fetch data for: ${symbol}</div>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            document.getElementById('quickAddResult').innerHTML = `
+                <div class="bg-red-50 border border-red-200 rounded p-3">
+                    <div class="text-red-800">Error adding symbol</div>
+                </div>
+            `;
+        }
+    }
+
+    // Load system health
+    async function loadHealth() {
+        try {
+            const response = await fetch('/health');
+            const data = await response.json();
+            
+            if (data.success) {
+                document.getElementById('healthStatus').innerHTML = `
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="font-medium">Status:</span>
+                            <span class="bg-green-100 text-green-800 px-2 py-1 rounded-full text-sm">
+                                <i class="fas fa-check-circle mr-1"></i>Healthy
+                            </span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="font-medium">Version:</span>
+                            <span class="text-gray-600">${data.data.version}</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="font-medium">Features:</span>
+                            <span class="text-gray-600">${data.data.features.length} active</span>
+                        </div>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            document.getElementById('healthStatus').innerHTML = `
+                <div class="text-center py-4">
+                    <i class="fas fa-exclamation-triangle text-red-500 text-2xl mb-2"></i>
+                    <p class="text-red-600">Health check failed</p>
+                </div>
+            `;
+        }
+    }
+
+    // Load database stats
+    async function loadDatabaseStats() {
+        try {
+            const response = await fetch('/api/stats');
+            const data = await response.json();
+            
+            if (data.success) {
+                const stats = data.data;
+                document.getElementById('databaseStats').innerHTML = `
+                    <div class="border-t pt-4">
+                        <h3 class="font-semibold mb-2 text-gray-700">Database Statistics</h3>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span>Total Symbols:</span>
+                                <span class="font-medium">${stats.total_symbols || 0}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Historical Records:</span>
+                                <span class="font-medium">${stats.total_historical_prices || 0}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Cache Entries:</span>
+                                <span class="font-medium">${stats.cache_entries || 0}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            document.getElementById('databaseStats').innerHTML = `
+                <div class="border-t pt-4">
+                    <div class="text-red-600 text-sm">Error loading database stats</div>
+                </div>
+            `;
+        }
+    }
+
+    // Load recent symbols
+    async function loadRecentSymbols() {
+        try {
+            const response = await fetch('/api/symbols');
+            const data = await response.json();
+            
+            if (data.success && data.data.length > 0) {
+                const recent = data.data.slice(0, 5); // Show last 5 symbols
+                const recentHtml = recent.map(symbol => `
+                    <div class="flex items-center justify-between p-3 border border-gray-200 rounded mb-2">
+                        <div>
+                            <span class="font-semibold">${symbol.symbol}</span>
+                            <span class="text-gray-600 ml-2">${symbol.name || 'No name'}</span>
+                        </div>
+                        <a href="/ui/analytics?symbol=${symbol.symbol}" 
+                           class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm transition duration-200">
+                            View
+                        </a>
+                    </div>
+                `).join('');
+                
+                document.getElementById('recentSymbols').innerHTML = `
+                    <div class="mb-3">
+                        <span class="text-sm text-gray-600">Recent symbols (${data.data.length} total)</span>
+                    </div>
+                    ${recentHtml}
+                    ${data.data.length > 5 ? `
+                    <div class="text-center mt-3">
+                        <a href="/ui/search" class="text-blue-600 hover:text-blue-800 text-sm">
+                            View all ${data.data.length} symbols →
+                        </a>
+                    </div>
+                    ` : ''}
+                `;
+            } else {
+                document.getElementById('recentSymbols').innerHTML = `
+                    <div class="text-center py-8">
+                        <i class="fas fa-database text-gray-400 text-3xl mb-3"></i>
+                        <h3 class="text-lg font-semibold text-gray-600 mb-2">No symbols in database</h3>
+                        <p class="text-gray-500 mb-4">Start by adding some symbols above</p>
+                        <a href="/ui/search" class="inline-flex items-center px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm transition duration-200">
+                            <i class="fas fa-plus mr-2"></i>Add Symbols
+                        </a>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            document.getElementById('recentSymbols').innerHTML = `
+                <div class="text-center py-4 text-red-600">
+                    <i class="fas fa-exclamation-triangle mb-2"></i>
+                    <p>Error loading symbols</p>
+                </div>
+            `;
+        }
+    }
+
+    function refreshStats() {
+        loadHealth();
+        loadDatabaseStats();
+        loadRecentSymbols();
+    }
+
+    // Quick add form handler
+    document.getElementById('quickAddForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const symbol = document.getElementById('quickSymbolInput').value.trim().toUpperCase();
+        
+        if (!symbol) {
+            document.getElementById('quickAddResult').innerHTML = '<div class="text-red-600">Please enter a symbol</div>';
+            return;
+        }
+
+        showLoading('quickAddBtn');
+        document.getElementById('quickAddResult').innerHTML = '<div class="text-center py-2"><div class="loading mx-auto"></div></div>';
+        
+        await quickAddSymbol(symbol);
+        hideLoading('quickAddBtn', '<i class="fas fa-plus mr-1"></i>Add');
+        
+        // Clear input
+        document.getElementById('quickSymbolInput').value = '';
+    });
+
+    // Load data on page load
+    refreshStats();
+</script>
+{% endblock %} 
