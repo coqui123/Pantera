@@ -14,8 +14,8 @@ Thank you for your interest in contributing to Mango Data Service! This document
 
 1. **Fork and Clone**
    ```bash
-   git clone https://github.com/yourusername/mango-data-service.git
-   cd mango-data-service
+       git clone https://github.com/coqui123/Pantera.git
+    cd Pantera
    ```
 
 2. **Environment Setup**
@@ -326,8 +326,8 @@ We follow [Semantic Versioning](https://semver.org/):
 
 ## 📞 Getting Help
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/mango-data-service/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/mango-data-service/discussions)
+- **Issues**: [GitHub Issues](https://github.com/coqui123/Pantera/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/coqui123/Pantera/discussions)
 - **Documentation**: Check README.md and docs/ directory
 
 ## 📄 Code of Conduct

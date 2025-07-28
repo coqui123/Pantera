@@ -57,8 +57,8 @@ A high-performance, production-ready Yahoo Finance data service built with Rust.
 ### Option 1: API Service Only (Default)
 ```bash
 # Clone and setup
-git clone <your-repo-url>
-cd mango-data-service
+git clone https://github.com/coqui123/Pantera.git
+cd Pantera
 cp .env.example .env
 
 # Run API service only
@@ -72,8 +72,8 @@ cargo build --release
 ### Option 2: With Web Interface
 ```bash
 # Clone and setup
-git clone <your-repo-url>
-cd mango-data-service
+git clone https://github.com/coqui123/Pantera.git
+cd Pantera
 cp .env.example .env
 
 # Run with web interface enabled
@@ -114,8 +114,8 @@ open http://localhost:3000/ui
 
 1. **Clone Repository**
    ```bash
-   git clone <your-repo-url>
-   cd mango-data-service
+   git clone https://github.com/coqui123/Pantera.git
+   cd Pantera
    ```
 
 2. **Environment Setup**
@@ -1036,8 +1036,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/your-repo/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-repo/discussions)
+- **Issues**: [GitHub Issues](https://github.com/coqui123/Pantera/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/coqui123/Pantera/discussions)
 - **Documentation**: This README and comprehensive docs in `docs/`
 - **Web Interface**: Built-in help and tooltips available in the interface
 

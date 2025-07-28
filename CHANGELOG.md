@@ -212,8 +212,8 @@ This is the first release of Mango Data Service - a high-performance Yahoo Finan
 
 ### 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/mango-data-service/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/mango-data-service/discussions)
+- **Issues**: [GitHub Issues](https://github.com/coqui123/Pantera/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/coqui123/Pantera/discussions)
 - **Documentation**: Comprehensive docs in `/docs` directory
 
 ### 🏆 Acknowledgments

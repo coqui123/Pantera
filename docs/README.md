@@ -249,8 +249,8 @@ All examples are located in the [`../examples/`](../examples/) directory:
 
 ## 📞 Getting Help
 
-- **Issues**: [GitHub Issues](https://github.com/your-repo/issues) for bugs and feature requests
-- **Discussions**: [GitHub Discussions](https://github.com/your-repo/discussions) for questions
+- **Issues**: [GitHub Issues](https://github.com/coqui123/Pantera/issues) for bugs and feature requests
+- **Discussions**: [GitHub Discussions](https://github.com/coqui123/Pantera/discussions) for questions
 - **Documentation**: This comprehensive documentation for guides and references
 - **Examples**: Practical examples in the [`../examples/`](../examples/) directory
 
