@@ -14,7 +14,7 @@ pub struct Database {
 }
 
 impl Database {
-    pub async fn new(database_url: &str) -> Result<Self> {
+    pub async fn new(database_url: &str, max_connections: u32) -> Result<Self> {
         // Handle SQLite-specific setup
         let processed_url = if database_url.starts_with("sqlite:") {
             // Extract the file path from the URL
@@ -43,7 +43,7 @@ impl Database {
         };
 
         let pool = SqlitePoolOptions::new()
-            .max_connections(50)
+            .max_connections(max_connections)
             .connect(&processed_url)
             .await?;
 

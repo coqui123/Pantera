@@ -1,3 +1,4 @@
+use crate::config::Config;
 use crate::database::Database;
 use crate::models::*;
 use anyhow::{anyhow, Result};
@@ -8,10 +9,11 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::sync::Mutex;
+use tokio::sync::Mutex;
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::Semaphore;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 use yahoo_finance_api::YahooConnector;
@@ -47,32 +49,54 @@ pub enum YahooServiceError {
 
 pub struct YahooFinanceService {
     pub db: Arc<Database>,
-    provider: YahooConnector,
-    // Concurrent cache using DashMap for better performance
-    historical_cache: DashMap<String, CachedData<Vec<HistoricalPrice>>>,
-    quote_cache: DashMap<String, CachedData<RealTimeQuote>>,
-    profile_cache: DashMap<String, CachedData<Option<CompanyProfile>>>,
+    provider: Arc<Mutex<YahooConnector>>, // Wrap in Arc<Mutex> for sharing across tasks
+    // Concurrent cache using DashMap for better performance with size limits
+    historical_cache: Arc<DashMap<String, CachedData<Vec<HistoricalPrice>>>>,
+    quote_cache: Arc<DashMap<String, CachedData<RealTimeQuote>>>,
+    profile_cache: Arc<DashMap<String, CachedData<Option<CompanyProfile>>>>,
     // Simple rate limiting using timestamps
-    api_rate_limits: Mutex<HashMap<String, Vec<Instant>>>,
-    yahoo_api_calls: Mutex<Vec<Instant>>,
+    api_rate_limits: Arc<Mutex<HashMap<String, Vec<Instant>>>>,
+    yahoo_api_calls: Arc<Mutex<Vec<Instant>>>,
     // Configuration
     config: RateLimitConfig,
+    // Cache configuration
+    cache_config: CacheConfig,
+    // Semaphore for controlling bulk operation concurrency
+    bulk_semaphore: Arc<Semaphore>,
+}
+
+#[derive(Debug, Clone)]
+struct CacheConfig {
+    max_size_historical: usize,
+    max_size_quotes: usize,
+    max_size_profiles: usize,
 }
 
 impl YahooFinanceService {
-    pub fn new(db: Arc<Database>) -> Result<Self> {
+    pub fn new(db: Arc<Database>, config: Config) -> Result<Self> {
         let provider = YahooConnector::new()?;
-        let config = RateLimitConfig::default();
+        let rate_limit_config = RateLimitConfig {
+            requests_per_minute: config.rate_limiting.api_requests_per_minute,
+            yahoo_api_requests_per_minute: config.rate_limiting.yahoo_api_requests_per_minute,
+        };
+        
+        let cache_config = CacheConfig {
+            max_size_historical: config.cache.max_size_historical,
+            max_size_quotes: config.cache.max_size_quotes,
+            max_size_profiles: config.cache.max_size_profiles,
+        };
 
         Ok(Self {
             db,
-            provider,
-            historical_cache: DashMap::new(),
-            quote_cache: DashMap::new(),
-            profile_cache: DashMap::new(),
-            api_rate_limits: Mutex::new(HashMap::new()),
-            yahoo_api_calls: Mutex::new(Vec::new()),
-            config,
+            provider: Arc::new(Mutex::new(provider)),
+            historical_cache: Arc::new(DashMap::new()),
+            quote_cache: Arc::new(DashMap::new()),
+            profile_cache: Arc::new(DashMap::new()),
+            api_rate_limits: Arc::new(Mutex::new(HashMap::new())),
+            yahoo_api_calls: Arc::new(Mutex::new(Vec::new())),
+            config: rate_limit_config,
+            cache_config,
+            bulk_semaphore: Arc::new(Semaphore::new(10)), // Default max 10 concurrent bulk operations
         })
     }
 
@@ -86,12 +110,41 @@ impl YahooFinanceService {
         }
     }
 
+    /// Apply LRU eviction to cache if it exceeds max size
+    fn evict_cache_if_needed<V>(cache: &Arc<DashMap<String, CachedData<V>>>, max_size: usize) {
+        if cache.len() > max_size {
+            // Simple eviction: remove expired entries first, then oldest if still over limit
+            cache.retain(|_, cached| !cached.is_expired());
+            
+            // If still over limit, remove oldest entries (simple approach: remove all and let them repopulate)
+            // In a production system, you'd want a proper LRU cache
+            if cache.len() > max_size {
+                let to_remove = cache.len() - max_size;
+                let mut keys_to_remove: Vec<String> = Vec::new();
+                
+                // Collect oldest keys (simple approach - in production use proper LRU)
+                for entry in cache.iter() {
+                    if keys_to_remove.len() >= to_remove {
+                        break;
+                    }
+                    keys_to_remove.push(entry.key().clone());
+                }
+                
+                for key in keys_to_remove {
+                    cache.remove(&key);
+                }
+                
+                debug!("Evicted {} entries from cache to maintain size limit", to_remove);
+            }
+        }
+    }
+
     // Check API rate limit
-    pub fn check_api_rate_limit(&self, client_id: &str) -> Result<(), YahooServiceError> {
+    pub async fn check_api_rate_limit(&self, client_id: &str) -> Result<(), YahooServiceError> {
         let now = Instant::now();
         let window = Duration::from_secs(60); // 1 minute window
 
-        let mut limits = self.api_rate_limits.lock().unwrap();
+        let mut limits = self.api_rate_limits.lock().await;
         let client_calls = limits.entry(client_id.to_string()).or_default();
 
         // Remove old calls outside the window
@@ -106,18 +159,39 @@ impl YahooFinanceService {
         Ok(())
     }
 
-    // Check Yahoo API rate limit
-    fn check_yahoo_api_rate_limit(&self) -> Result<(), YahooServiceError> {
+    // Check Yahoo API rate limit with improved strategy
+    async fn check_yahoo_api_rate_limit(&self) -> Result<(), YahooServiceError> {
         let now = Instant::now();
         let window = Duration::from_secs(60); // 1 minute window
 
-        let mut calls = self.yahoo_api_calls.lock().unwrap();
+        let mut calls = self.yahoo_api_calls.lock().await;
 
         // Remove old calls outside the window
         calls.retain(|&call_time| now.duration_since(call_time) < window);
 
-        if calls.len() >= self.config.yahoo_api_requests_per_minute as usize {
-            warn!("Yahoo API rate limit exceeded");
+        let limit = self.config.yahoo_api_requests_per_minute as usize;
+        
+        // If we're at or over the limit, check if we can make a request soon
+        if calls.len() >= limit {
+            // Find the oldest call to see when we can make another request
+            if let Some(oldest_call) = calls.iter().min() {
+                let elapsed = now.duration_since(*oldest_call);
+                let remaining = window.saturating_sub(elapsed);
+                
+                // Log helpful information about when the next request can be made
+                if remaining.as_millis() > 0 {
+                    warn!(
+                        "Yahoo API rate limit exceeded ({} requests in window). Next request available in {}ms",
+                        calls.len(),
+                        remaining.as_millis()
+                    );
+                } else {
+                    warn!("Yahoo API rate limit exceeded ({} requests in window)", calls.len());
+                }
+            } else {
+                warn!("Yahoo API rate limit exceeded ({} requests in window)", calls.len());
+            }
+            
             return Err(YahooServiceError::RateLimitExceeded);
         }
 
@@ -151,7 +225,7 @@ impl YahooFinanceService {
         );
 
         // Check Yahoo API rate limit
-        self.check_yahoo_api_rate_limit()?;
+        self.check_yahoo_api_rate_limit().await?;
 
         // Ensure symbol exists in database
         let symbol_id = self.db.upsert_symbol(symbol, None).await?;
@@ -195,17 +269,20 @@ impl YahooFinanceService {
         }
 
         // Fetch from Yahoo Finance API
-        let response = self
-            .provider
-            .get_quote_range(symbol, interval, "1y")
-            .await
-            .map_err(|e| {
-                anyhow!(
-                    "Failed to fetch data from Yahoo Finance for {}: {}",
-                    symbol,
-                    e
-                )
-            })?;
+        // Note: Using async mutex to allow holding lock across await
+        let response = {
+            let provider = self.provider.lock().await;
+            provider
+                .get_quote_range(symbol, interval, "1y")
+                .await
+                .map_err(|e| {
+                    anyhow!(
+                        "Failed to fetch data from Yahoo Finance for {}: {}",
+                        symbol,
+                        e
+                    )
+                })?
+        };
 
         let quotes = response
             .quotes()
@@ -224,8 +301,9 @@ impl YahooFinanceService {
             inserted, symbol
         );
 
-        // Update cache
+        // Update cache with size limit
         let ttl = self.get_cache_ttl(interval);
+        Self::evict_cache_if_needed(&self.historical_cache, self.cache_config.max_size_historical);
         self.historical_cache
             .insert(cache_key, CachedData::new(historical_prices.clone(), ttl));
 
@@ -275,13 +353,16 @@ impl YahooFinanceService {
         }
 
         // Check Yahoo API rate limit
-        self.check_yahoo_api_rate_limit()?;
+        self.check_yahoo_api_rate_limit().await?;
 
         // Ensure symbol exists in database
         let symbol_id = self.db.upsert_symbol(symbol, None).await?;
 
         // Try to search for the symbol to get basic info
-        let search_result = self.provider.search_ticker(symbol).await;
+        let search_result = {
+            let provider = self.provider.lock().await;
+            provider.search_ticker(symbol).await
+        };
 
         let company_profile = match search_result {
             Ok(search_response) => {
@@ -310,8 +391,9 @@ impl YahooFinanceService {
                     self.db.upsert_company_profile(&profile).await?;
                     info!("Updated company profile for {}", symbol);
 
-                    // Update cache
+                    // Update cache with size limit
                     let ttl = Duration::from_secs(24 * 3600); // 24 hours
+                    Self::evict_cache_if_needed(&self.profile_cache, self.cache_config.max_size_profiles);
                     self.profile_cache
                         .insert(cache_key, CachedData::new(Some(profile.clone()), ttl));
 
@@ -390,8 +472,9 @@ impl YahooFinanceService {
             }
         }
 
-        // Update memory cache
+        // Update memory cache with size limit
         let ttl = self.get_cache_ttl(interval);
+        Self::evict_cache_if_needed(&self.historical_cache, self.cache_config.max_size_historical);
         self.historical_cache
             .insert(cache_key, CachedData::new(db_data.clone(), ttl));
 
@@ -423,10 +506,15 @@ impl YahooFinanceService {
         }
 
         // Check Yahoo API rate limit
-        self.check_yahoo_api_rate_limit()?;
+        self.check_yahoo_api_rate_limit().await?;
 
         // Fetch fresh data from Yahoo Finance
-        match self.provider.get_latest_quotes(symbol, "1d").await {
+        let result = {
+            let provider = self.provider.lock().await;
+            provider.get_latest_quotes(symbol, "1d").await
+        };
+        
+        match result {
             Ok(response) => {
                 if let Ok(quote_data) = response.last_quote() {
                     let symbol_id = self.db.upsert_symbol(symbol, None).await?;
@@ -441,8 +529,9 @@ impl YahooFinanceService {
                         warn!("Failed to store real-time quote for {}: {}", symbol, e);
                     }
 
-                    // Update cache
+                    // Update cache with size limit
                     let ttl = Duration::from_secs(300); // 5 minutes
+                    Self::evict_cache_if_needed(&self.quote_cache, self.cache_config.max_size_quotes);
                     self.quote_cache
                         .insert(cache_key, CachedData::new(quote.clone(), ttl));
 
@@ -458,18 +547,45 @@ impl YahooFinanceService {
         }
     }
 
-    /// Bulk fetch historical data with rate limiting
+    /// Bulk fetch historical data with proper concurrency control
     pub async fn bulk_fetch_historical(
-        &self,
+        self: &Arc<Self>,
         symbols: Vec<&str>,
         interval: &str,
-        _max_concurrent: usize,
+        max_concurrent: usize,
     ) -> Result<Vec<(String, Result<Vec<HistoricalPrice>>)>> {
-        let mut results = Vec::new();
+        // Create semaphore for this bulk operation
+        let semaphore = Arc::new(Semaphore::new(max_concurrent.max(1).min(10)));
+        let mut handles = Vec::new();
 
-        for symbol in symbols {
-            let result = self.fetch_historical_data(symbol, interval, false).await;
-            results.push((symbol.to_string(), result));
+        // Convert symbols to owned strings for async tasks
+        let symbols_owned: Vec<String> = symbols.iter().map(|s| s.to_string()).collect();
+        let interval_owned = interval.to_string();
+
+        for symbol in symbols_owned {
+            let service = Arc::clone(self);
+            let interval = interval_owned.clone();
+            let semaphore = semaphore.clone();
+            
+            let handle = tokio::spawn(async move {
+                let _permit = semaphore.acquire().await;
+                let result = service.fetch_historical_data(&symbol, &interval, false).await;
+                (symbol, result)
+            });
+            
+            handles.push(handle);
+        }
+
+        // Wait for all tasks to complete
+        let mut results = Vec::new();
+        for handle in handles {
+            match handle.await {
+                Ok(result) => results.push(result),
+                Err(e) => {
+                    error!("Bulk fetch task panicked: {}", e);
+                    // Continue with other results
+                }
+            }
         }
 
         Ok(results)
@@ -532,10 +648,15 @@ impl YahooFinanceService {
         }
 
         // Check Yahoo API rate limit
-        self.check_yahoo_api_rate_limit()?;
+        self.check_yahoo_api_rate_limit().await?;
 
         // Try Yahoo Finance API
-        match self.provider.search_ticker(symbol).await {
+        let result = {
+            let provider = self.provider.lock().await;
+            provider.search_ticker(symbol).await
+        };
+        
+        match result {
             Ok(response) => Ok(!response.quotes.is_empty()),
             Err(_) => Ok(false),
         }

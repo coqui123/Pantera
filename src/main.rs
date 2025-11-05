@@ -8,21 +8,24 @@ use axum::{
     Router,
 };
 use std::sync::Arc;
-use std::time::Duration;
 use tower::ServiceBuilder;
 use tower_http::{
     cors::CorsLayer,
     trace::TraceLayer,
 };
-use tracing::info;
+use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+mod config;
 mod database;
+mod errors;
 mod handlers;
 mod models;
+mod validation;
 mod yahoo_service;
 mod web_ui;
 
+use config::Config;
 use database::Database;
 use handlers::{
     health_check, get_symbols, search_symbols, validate_symbol,
@@ -47,31 +50,30 @@ async fn main() -> Result<()> {
 
     info!("🚀 Starting Mango Data Service with optimizations");
 
-    // Load environment variables
-    dotenvy::dotenv().ok();
-
-    // Database URL - use SQLite by default with proper path
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| {
-            let current_dir = std::env::current_dir().unwrap_or_default();
-            let db_path = current_dir.join("data").join("data.db");
-            format!("sqlite:{}", db_path.display())
-        });
+    // Load and validate configuration
+    let config = Config::from_env()?;
+    config.validate()?;
     
-    info!("Connecting to database: {}", database_url);
+    if config.cors.allow_all_origins {
+        warn!("⚠️  CORS is configured to allow all origins. This is insecure for production!");
+        warn!("⚠️  Set CORS_ALLOWED_ORIGINS environment variable to restrict origins.");
+    }
+    
+    info!("Connecting to database: {}", config.database.url);
 
     // Initialize database
-    let db = Database::new(&database_url).await?;
+    let db = Database::new(&config.database.url, config.database.max_connections).await?;
     info!("✅ Database initialized successfully");
 
     // Create Yahoo Finance service with optimizations
-    let yahoo_service = Arc::new(YahooFinanceService::new(Arc::new(db))?);
+    let yahoo_service = Arc::new(YahooFinanceService::new(Arc::new(db), config.clone())?);
     info!("✅ Yahoo Finance service initialized with rate limiting and caching");
 
     // Start background cache cleanup task
     let cleanup_service = yahoo_service.clone();
+    let cleanup_interval = config.cache.cleanup_interval;
     tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(3600)); // Every hour
+        let mut interval = tokio::time::interval(cleanup_interval);
         loop {
             interval.tick().await;
             cleanup_service.cleanup_cache();
@@ -80,10 +82,26 @@ async fn main() -> Result<()> {
     });
 
     // Build CORS layer
-    let cors = CorsLayer::new()
-        .allow_origin("*".parse::<HeaderValue>().unwrap())
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
-        .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
+    let cors = if config.cors.allow_all_origins {
+        CorsLayer::new()
+            .allow_origin("*".parse::<HeaderValue>().unwrap())
+            .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
+            .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE])
+    } else {
+        let mut cors_builder = CorsLayer::new()
+            .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
+            .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
+        
+        for origin in &config.cors.allowed_origins {
+            if let Ok(header_value) = origin.parse::<HeaderValue>() {
+                cors_builder = cors_builder.allow_origin(header_value);
+            } else {
+                warn!("Invalid CORS origin: {}", origin);
+            }
+        }
+        
+        cors_builder
+    };
 
     // Build the application with optimized routes
     let app = Router::new()
@@ -150,12 +168,7 @@ async fn main() -> Result<()> {
         .with_state(yahoo_service);
 
     // Start the server
-    let port = std::env::var("PORT")
-        .unwrap_or_else(|_| "3000".to_string())
-        .parse::<u16>()
-        .unwrap_or(3000);
-
-    let addr = format!("0.0.0.0:{port}");
+    let addr = format!("{}:{}", config.server.host, config.server.port);
     info!("🌐 Server starting on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;

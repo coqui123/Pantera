@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::Json,
 };
 use chrono::{DateTime, Utc};
@@ -10,7 +10,13 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
+use crate::config::{
+    MAX_BULK_SYMBOLS, MAX_COMPARE_SYMBOLS, MAX_HISTORICAL_LIMIT,
+    MIN_TECHNICAL_INDICATOR_PERIODS, DEFAULT_HISTORICAL_LIMIT,
+};
+use crate::errors::{ExternalError, InternalError};
 use crate::models::{ApiResponse, HistoricalResponse, ProfileResponse, QuoteResponse, Symbol};
+use crate::validation::{validate_date_range, validate_limit, validate_search_query};
 use crate::yahoo_service::{YahooFinanceService, YahooServiceError};
 
 type AppState = Arc<YahooFinanceService>;
@@ -43,9 +49,28 @@ pub struct SearchParams {
     pub limit: Option<i32>,
 }
 
-// Helper function to extract client identifier for rate limiting
-fn get_client_id() -> String {
-    "default_client".to_string() // Simplified for web UI compatibility
+/// Extract client identifier from request headers for rate limiting
+/// Checks X-Real-IP, X-Forwarded-For, and falls back to a default
+fn get_client_id(headers: &HeaderMap) -> String {
+    // Check X-Real-IP first (set by reverse proxies)
+    if let Some(real_ip) = headers.get("x-real-ip") {
+        if let Ok(ip_str) = real_ip.to_str() {
+            return ip_str.to_string();
+        }
+    }
+
+    // Check X-Forwarded-For (may contain multiple IPs, take first)
+    if let Some(forwarded_for) = headers.get("x-forwarded-for") {
+        if let Ok(forwarded_str) = forwarded_for.to_str() {
+            if let Some(first_ip) = forwarded_str.split(',').next() {
+                return first_ip.trim().to_string();
+            }
+        }
+    }
+
+    // Fallback: use a default identifier (this should rarely happen in production)
+    // In production, requests should always have one of the above headers set by the reverse proxy
+    "unknown".to_string()
 }
 
 // Health check endpoint
@@ -62,11 +87,12 @@ pub async fn health_check() -> Json<ApiResponse<serde_json::Value>> {
 // Get all symbols with rate limiting
 pub async fn get_symbols(
     State(service): State<AppState>,
+    headers: HeaderMap,
 ) -> Result<Json<ApiResponse<Vec<Symbol>>>, StatusCode> {
-    let client_id = get_client_id();
+    let client_id = get_client_id(&headers);
     
     // Check rate limit
-    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id) {
+    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
 
@@ -83,22 +109,29 @@ pub async fn get_symbols(
 pub async fn search_symbols(
     State(service): State<AppState>,
     Query(params): Query<SearchParams>,
+    headers: HeaderMap,
 ) -> Result<Json<ApiResponse<Vec<Symbol>>>, StatusCode> {
-    let client_id = get_client_id();
+    let client_id = get_client_id(&headers);
     
     // Check rate limit
-    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id) {
+    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
 
-    let query = params.q.trim();
-    if query.is_empty() {
-        return Ok(Json(ApiResponse::success(vec![])));
-    }
+    // Validate and sanitize search query
+    let query = match validate_search_query(&params.q) {
+        Ok(q) => q,
+        Err(e) => {
+            error!("Invalid search query: {}", e);
+            return Ok(Json(ApiResponse::error(Cow::Owned(
+                ExternalError::InvalidRequest.to_string(),
+            ))));
+        }
+    };
 
-    let limit = params.limit.unwrap_or(10).min(50); // Cap at 50 results
+    let limit = validate_limit(params.limit, 50, 10);
 
-    match service.db.search_symbols(query, limit).await {
+    match service.db.search_symbols(&query, limit).await {
         Ok(symbols) => {
             debug!("Found {} symbols matching '{}'", symbols.len(), query);
             Ok(Json(ApiResponse::success(symbols)))
@@ -114,15 +147,23 @@ pub async fn search_symbols(
 pub async fn validate_symbol(
     State(service): State<AppState>,
     Path(symbol): Path<String>,
+    headers: HeaderMap,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
-    let client_id = get_client_id();
+    let client_id = get_client_id(&headers);
     
     // Check rate limit
-    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id) {
+    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
 
+    // Validate symbol format
     let symbol = symbol.to_uppercase();
+    if let Err(e) = crate::validation::validate_symbol(&symbol) {
+        error!("Invalid symbol format: {}", e);
+        return Ok(Json(ApiResponse::error(Cow::Owned(
+            ExternalError::InvalidRequest.to_string(),
+        ))));
+    }
     
     match service.validate_symbol(&symbol).await {
         Ok(is_valid) => {
@@ -145,21 +186,39 @@ pub async fn get_historical_data(
     State(service): State<AppState>,
     Path(symbol): Path<String>,
     Query(params): Query<HistoricalParams>,
+    headers: HeaderMap,
 ) -> Result<Json<ApiResponse<HistoricalResponse<'static>>>, StatusCode> {
-    let client_id = get_client_id();
+    let client_id = get_client_id(&headers);
     
     // Check rate limit
-    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id) {
+    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
 
+    // Validate symbol
     let symbol = symbol.to_uppercase();
+    if let Err(e) = crate::validation::validate_symbol(&symbol) {
+        error!("Invalid symbol: {}", e);
+        return Ok(Json(ApiResponse::error(Cow::Owned(
+            ExternalError::InvalidRequest.to_string(),
+        ))));
+    }
+    
     let symbol_cow = Cow::Owned(symbol.clone());
+    
+    // Validate date range
+    if let Err(e) = validate_date_range(params.start_date, params.end_date) {
+        error!("Invalid date range: {}", e);
+        return Ok(Json(ApiResponse::error(Cow::Owned(
+            ExternalError::InvalidRequest.to_string(),
+        ))));
+    }
     
     // Parse dates
     let start_date = params.start_date;
     let end_date = params.end_date;
     let force_refresh = params.force_refresh.unwrap_or(false);
+    let limit = params.limit.map(|l| validate_limit(Some(l), MAX_HISTORICAL_LIMIT, DEFAULT_HISTORICAL_LIMIT));
 
     // If force refresh or limit is provided, fetch fresh data
     if force_refresh || (params.limit.unwrap_or(0) > 0 && params.interval.is_some()) {
@@ -182,7 +241,7 @@ pub async fn get_historical_data(
             start_date,
             end_date,
             params.interval.as_deref(),
-            params.limit,
+            limit,
         )
         .await
     {
@@ -207,15 +266,23 @@ pub async fn fetch_historical_data(
     State(service): State<AppState>,
     Path(symbol): Path<String>,
     Query(params): Query<HistoricalParams>,
+    headers: HeaderMap,
 ) -> Result<Json<ApiResponse<String>>, StatusCode> {
-    let client_id = get_client_id();
+    let client_id = get_client_id(&headers);
     
     // Check rate limit
-    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id) {
+    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
 
+    // Validate symbol
     let symbol = symbol.to_uppercase();
+    if let Err(e) = crate::validation::validate_symbol(&symbol) {
+        error!("Invalid symbol: {}", e);
+        return Ok(Json(ApiResponse::error(Cow::Owned(
+            ExternalError::InvalidRequest.to_string(),
+        ))));
+    }
     let interval = params.interval.unwrap_or_else(|| "1d".to_string());
 
     match service
@@ -232,6 +299,11 @@ pub async fn fetch_historical_data(
             Ok(Json(ApiResponse::success(message)))
         }
         Err(e) => {
+            // Check if it's a rate limit error and return appropriate status
+            if e.to_string().contains("Rate limit exceeded") {
+                warn!("Rate limit exceeded for {}: {}", symbol, e);
+                return Err(StatusCode::TOO_MANY_REQUESTS);
+            }
             error!("Failed to fetch historical data for {}: {}", symbol, e);
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
@@ -242,15 +314,23 @@ pub async fn fetch_historical_data(
 pub async fn get_real_time_quote(
     State(service): State<AppState>,
     Path(symbol): Path<String>,
+    headers: HeaderMap,
 ) -> Result<Json<ApiResponse<Option<QuoteResponse<'static>>>>, StatusCode> {
-    let client_id = get_client_id();
+    let client_id = get_client_id(&headers);
     
     // Check rate limit
-    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id) {
+    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
 
+    // Validate symbol
     let symbol = symbol.to_uppercase();
+    if let Err(e) = crate::validation::validate_symbol(&symbol) {
+        error!("Invalid symbol: {}", e);
+        return Ok(Json(ApiResponse::error(Cow::Owned(
+            ExternalError::InvalidRequest.to_string(),
+        ))));
+    }
 
     match service.get_latest_quote(&symbol).await {
         Ok(quote) => {
@@ -276,15 +356,23 @@ pub async fn get_real_time_quote(
 pub async fn get_company_profile(
     State(service): State<AppState>,
     Path(symbol): Path<String>,
+    headers: HeaderMap,
 ) -> Result<Json<ApiResponse<ProfileResponse<'static>>>, StatusCode> {
-    let client_id = get_client_id();
+    let client_id = get_client_id(&headers);
     
     // Check rate limit
-    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id) {
+    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
 
+    // Validate symbol
     let symbol = symbol.to_uppercase();
+    if let Err(e) = crate::validation::validate_symbol(&symbol) {
+        error!("Invalid symbol: {}", e);
+        return Ok(Json(ApiResponse::error(Cow::Owned(
+            ExternalError::InvalidRequest.to_string(),
+        ))));
+    }
 
     match service.fetch_company_profile(&symbol, false).await {
         Ok(profile) => {
@@ -305,15 +393,23 @@ pub async fn get_company_profile(
 pub async fn get_symbol_overview(
     State(service): State<AppState>,
     Path(symbol): Path<String>,
+    headers: HeaderMap,
 ) -> Result<Json<ApiResponse<crate::yahoo_service::SymbolOverview>>, StatusCode> {
-    let client_id = get_client_id();
+    let client_id = get_client_id(&headers);
     
     // Check rate limit
-    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id) {
+    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
 
+    // Validate symbol
     let symbol = symbol.to_uppercase();
+    if let Err(e) = crate::validation::validate_symbol(&symbol) {
+        error!("Invalid symbol: {}", e);
+        return Ok(Json(ApiResponse::error(Cow::Owned(
+            ExternalError::InvalidRequest.to_string(),
+        ))));
+    }
 
     match service.get_symbol_overview(&symbol).await {
         Ok(overview) => Ok(Json(ApiResponse::success(overview))),
@@ -328,39 +424,55 @@ pub async fn get_symbol_overview(
 pub async fn bulk_fetch_historical(
     State(service): State<AppState>,
     Query(params): Query<BulkParams>,
+    headers: HeaderMap,
 ) -> Result<Json<ApiResponse<Vec<serde_json::Value>>>, StatusCode> {
-    let client_id = get_client_id();
+    let client_id = get_client_id(&headers);
     
     // Check rate limit
-    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id) {
+    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
 
-    let symbols: Vec<&str> = params
+    let symbols: Vec<String> = params
         .symbols
         .split(',')
-        .map(|s| s.trim())
+        .map(|s| s.trim().to_uppercase())
         .filter(|s| !s.is_empty())
         .collect();
     
     if symbols.is_empty() {
-        return Err(StatusCode::BAD_REQUEST);
+        return Ok(Json(ApiResponse::error(Cow::Owned(
+            ExternalError::InvalidRequest.to_string(),
+        ))));
+    }
+
+    // Validate all symbols
+    for symbol in &symbols {
+        if let Err(e) = crate::validation::validate_symbol(symbol) {
+            error!("Invalid symbol in bulk request: {}", e);
+            return Ok(Json(ApiResponse::error(Cow::Owned(
+                ExternalError::InvalidRequest.to_string(),
+            ))));
+        }
     }
 
     // Limit the number of symbols to prevent abuse
-    if symbols.len() > 20 {
+    if symbols.len() > MAX_BULK_SYMBOLS {
         let error_msg = format!(
-            "Too many symbols requested: {}. Maximum allowed: 20",
-            symbols.len()
+            "Too many symbols requested: {}. Maximum allowed: {}",
+            symbols.len(),
+            MAX_BULK_SYMBOLS
         );
-        return Ok(Json(ApiResponse::error(error_msg)));
+        return Ok(Json(ApiResponse::error(Cow::Owned(error_msg))));
     }
+    
+    let symbol_refs: Vec<&str> = symbols.iter().map(|s| s.as_str()).collect();
 
     let interval = params.interval.unwrap_or_else(|| "1d".to_string());
     let max_concurrent = params.max_concurrent.unwrap_or(5).clamp(1, 10) as usize;
 
-    match service
-        .bulk_fetch_historical(symbols, &interval, max_concurrent)
+    match (&service as &Arc<YahooFinanceService>)
+        .bulk_fetch_historical(symbol_refs, &interval, max_concurrent)
         .await
     {
         Ok(results) => {
@@ -395,16 +507,25 @@ pub async fn get_price_analysis(
     State(service): State<AppState>,
     Path(symbol): Path<String>,
     Query(params): Query<AnalysisParams>,
+    headers: HeaderMap,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
-    let client_id = get_client_id();
+    let client_id = get_client_id(&headers);
     
     // Check rate limit
-    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id) {
+    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
 
+    // Validate symbol
     let symbol = symbol.to_uppercase();
-    let limit = params.days.or(params.limit).unwrap_or(30).clamp(1, 365);
+    if let Err(e) = crate::validation::validate_symbol(&symbol) {
+        error!("Invalid symbol: {}", e);
+        return Ok(Json(ApiResponse::error(Cow::Owned(
+            ExternalError::InvalidRequest.to_string(),
+        ))));
+    }
+    
+    let limit = validate_limit(params.days.or(params.limit), 365, 30);
 
     match service
         .get_historical_data(&symbol, None, None, Some("1d"), Some(limit))
@@ -502,11 +623,12 @@ pub async fn get_price_analysis(
 // Get database statistics with cache info
 pub async fn get_database_stats(
     State(service): State<AppState>,
+    headers: HeaderMap,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
-    let client_id = get_client_id();
+    let client_id = get_client_id(&headers);
     
     // Check rate limit
-    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id) {
+    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
 
@@ -523,17 +645,25 @@ pub async fn get_database_stats(
 pub async fn get_comprehensive_quote(
     Path(symbol): Path<String>,
     State(yahoo_service): State<Arc<YahooFinanceService>>,
+    headers: HeaderMap,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
-    let client_id = get_client_id();
+    let client_id = get_client_id(&headers);
     
     // Check rate limit
     if let Err(YahooServiceError::RateLimitExceeded) =
-        yahoo_service.check_api_rate_limit(&client_id)
+        yahoo_service.check_api_rate_limit(&client_id).await
     {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
 
+    // Validate symbol
     let symbol = symbol.to_uppercase();
+    if let Err(e) = crate::validation::validate_symbol(&symbol) {
+        error!("Invalid symbol: {}", e);
+        return Ok(Json(ApiResponse::error(Cow::Owned(
+            ExternalError::InvalidRequest.to_string(),
+        ))));
+    }
     
     match yahoo_service.get_comprehensive_quote(&symbol).await {
         Ok(data) => Ok(Json(ApiResponse::success(data))),
@@ -548,17 +678,25 @@ pub async fn get_comprehensive_quote(
 pub async fn get_extended_quote_data(
     Path(symbol): Path<String>,
     State(yahoo_service): State<Arc<YahooFinanceService>>,
+    headers: HeaderMap,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
-    let client_id = get_client_id();
+    let client_id = get_client_id(&headers);
     
     // Check rate limit
     if let Err(YahooServiceError::RateLimitExceeded) =
-        yahoo_service.check_api_rate_limit(&client_id)
+        yahoo_service.check_api_rate_limit(&client_id).await
     {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
 
+    // Validate symbol
     let symbol = symbol.to_uppercase();
+    if let Err(e) = crate::validation::validate_symbol(&symbol) {
+        error!("Invalid symbol: {}", e);
+        return Ok(Json(ApiResponse::error(Cow::Owned(
+            ExternalError::InvalidRequest.to_string(),
+        ))));
+    }
     
     match yahoo_service.get_extended_quote_data(&symbol).await {
         Ok(data) => Ok(Json(ApiResponse::success(data))),
@@ -574,16 +712,31 @@ pub async fn get_technical_indicators(
     State(service): State<AppState>,
     Path(symbol): Path<String>,
     Query(params): Query<AnalysisParams>,
+    headers: HeaderMap,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
-    let client_id = get_client_id();
+    let client_id = get_client_id(&headers);
     
     // Check rate limit
-    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id) {
+    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
 
+    // Validate symbol
     let symbol = symbol.to_uppercase();
-    let limit = params.days.or(params.limit).unwrap_or(100).clamp(20, 500);
+    if let Err(e) = crate::validation::validate_symbol(&symbol) {
+        error!("Invalid symbol: {}", e);
+        return Ok(Json(ApiResponse::error(Cow::Owned(
+            ExternalError::InvalidRequest.to_string(),
+        ))));
+    }
+    
+    let limit = validate_limit(params.days.or(params.limit), 500, 100);
+    if limit < MIN_TECHNICAL_INDICATOR_PERIODS as i32 {
+        return Ok(Json(ApiResponse::error(Cow::Owned(format!(
+            "Limit must be at least {} periods for technical indicators",
+            MIN_TECHNICAL_INDICATOR_PERIODS
+        )))));
+    }
 
     info!("Fetching technical indicators for {} with limit {}", symbol, limit);
     
@@ -594,13 +747,14 @@ pub async fn get_technical_indicators(
         Ok(data) => {
             info!("Got {} data points for technical analysis of {}", data.len(), symbol);
             
-            if data.len() < 20 {
+            if data.len() < MIN_TECHNICAL_INDICATOR_PERIODS {
                 let error_msg = format!(
-                    "Insufficient data for technical analysis (minimum 20 periods required). Available: {} periods", 
+                    "Insufficient data for technical analysis (minimum {} periods required). Available: {} periods", 
+                    MIN_TECHNICAL_INDICATOR_PERIODS,
                     data.len()
                 );
                 info!("Insufficient data for {}: {}", symbol, error_msg);
-                return Ok(Json(ApiResponse::error(error_msg)));
+                return Ok(Json(ApiResponse::error(Cow::Owned(error_msg))));
             }
 
             // Validate and sanitize input data with comprehensive checks
@@ -614,28 +768,22 @@ pub async fn get_technical_indicators(
                 .filter(|&x| x.is_finite() && x >= 0.0 && x < 1e15) // Reasonable volume range
                 .collect();
                 
-            let _highs: Vec<f64> = data.iter()
-                .map(|p| p.high.to_f64().unwrap_or(0.0))
-                .filter(|&x| x.is_finite() && x > 0.0 && x < 1e10)
-                .collect();
-                
-            let _lows: Vec<f64> = data.iter()
-                .map(|p| p.low.to_f64().unwrap_or(0.0))
-                .filter(|&x| x.is_finite() && x > 0.0 && x < 1e10)
-                .collect();
+            // Note: highs and lows are calculated but not currently used in response
+            // They could be used for additional technical analysis in the future
             
             // Final validation after sanitization
-            if prices.len() < 20 || prices.iter().all(|&p| p == 0.0) {
+            if prices.len() < MIN_TECHNICAL_INDICATOR_PERIODS || prices.iter().all(|&p| p == 0.0) {
                 let error_msg = format!(
-                    "Insufficient valid price data after sanitization. Symbol: {}, Valid prices: {}", 
-                    symbol, prices.len()
+                    "Insufficient valid price data after sanitization. Symbol: {}, Valid prices: {} (minimum {} required)", 
+                    symbol, prices.len(), MIN_TECHNICAL_INDICATOR_PERIODS
                 );
                 warn!("Technical indicators failed for {}: {}", symbol, error_msg);
-                return Ok(Json(ApiResponse::error(error_msg)));
+                return Ok(Json(ApiResponse::error(Cow::Owned(error_msg))));
             }
 
-            // Calculate technical indicators with comprehensive error handling
-            let calculation_result = std::panic::catch_unwind(|| {
+            // Calculate technical indicators with proper error handling (no panics)
+            // All calculations use safe functions that return empty vectors on error
+            let calculation_result: Result<_, InternalError> = (|| {
                 // Simple Moving Averages with validation
                 let sma_5 = calculate_sma_safe(&prices, 5);
                 let sma_10 = calculate_sma_safe(&prices, 10);
@@ -673,15 +821,17 @@ pub async fn get_technical_indicators(
                 let support_level = if support_level.is_finite() { support_level } else { 0.0 };
                 let resistance_level = if resistance_level.is_finite() { resistance_level } else { 0.0 };
                 
-                (sma_5, sma_10, sma_20, sma_50, ema_12, ema_26, rsi, macd_line, macd_signal, macd_histogram, bb_upper, bb_middle, bb_lower, volume_sma_20, support_level, resistance_level)
-            });
+                Ok((sma_5, sma_10, sma_20, sma_50, ema_12, ema_26, rsi, macd_line, macd_signal, macd_histogram, bb_upper, bb_middle, bb_lower, volume_sma_20, support_level, resistance_level))
+            })();
 
             let (sma_5, sma_10, sma_20, sma_50, ema_12, ema_26, rsi, macd_line, macd_signal, macd_histogram, bb_upper, bb_middle, bb_lower, volume_sma_20, support_level, resistance_level) = match calculation_result {
                 Ok(result) => result,
-                Err(_) => {
-                    let error_msg = format!("Technical indicators calculation failed for symbol: {}", symbol);
-                    error!("Technical indicators calculation panic for {}", symbol);
-                    return Ok(Json(ApiResponse::error(error_msg)));
+                Err(e) => {
+                    let error_msg = format!("Technical indicators calculation failed for symbol {}: {}", symbol, e);
+                    error!("Technical indicators calculation error: {}", error_msg);
+                    return Ok(Json(ApiResponse::error(Cow::Owned(
+                        ExternalError::InternalError.to_string(),
+                    ))));
                 }
             };
 
@@ -756,32 +906,48 @@ pub async fn get_technical_indicators(
 pub async fn compare_symbols(
     State(service): State<AppState>,
     Query(params): Query<BulkParams>,
+    headers: HeaderMap,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
-    let client_id = get_client_id();
+    let client_id = get_client_id(&headers);
     
     // Check rate limit
-    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id) {
+    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
 
-    let symbols: Vec<&str> = params
+    let symbols: Vec<String> = params
         .symbols
         .split(',')
-        .map(|s| s.trim())
+        .map(|s| s.trim().to_uppercase())
         .filter(|s| !s.is_empty())
         .collect();
     
     if symbols.is_empty() {
-        return Err(StatusCode::BAD_REQUEST);
+        return Ok(Json(ApiResponse::error(Cow::Owned(
+            ExternalError::InvalidRequest.to_string(),
+        ))));
     }
 
-    if symbols.len() > 10 {
-        let error_msg = format!(
-            "Too many symbols for comparison: {}. Maximum allowed: 10",
-            symbols.len()
-        );
-        return Ok(Json(ApiResponse::error(error_msg)));
+    // Validate all symbols
+    for symbol in &symbols {
+        if let Err(e) = crate::validation::validate_symbol(symbol) {
+            error!("Invalid symbol in comparison: {}", e);
+            return Ok(Json(ApiResponse::error(Cow::Owned(
+                ExternalError::InvalidRequest.to_string(),
+            ))));
+        }
     }
+
+    if symbols.len() > MAX_COMPARE_SYMBOLS {
+        let error_msg = format!(
+            "Too many symbols for comparison: {}. Maximum allowed: {}",
+            symbols.len(),
+            MAX_COMPARE_SYMBOLS
+        );
+        return Ok(Json(ApiResponse::error(Cow::Owned(error_msg))));
+    }
+    
+    let symbol_refs: Vec<&str> = symbols.iter().map(|s| s.as_str()).collect();
 
     let interval = params.interval.unwrap_or_else(|| "1d".to_string());
     let limit = 100; // Fixed limit for comparison
@@ -791,7 +957,7 @@ pub async fn compare_symbols(
     let mut correlation_matrix = serde_json::Map::new();
     let mut all_returns: std::collections::HashMap<String, Vec<f64>> = std::collections::HashMap::new();
 
-    for symbol in symbols.iter() {
+    for symbol in symbol_refs.iter() {
         match service
             .get_historical_data(symbol, None, None, Some(&interval), Some(limit))
             .await
@@ -842,17 +1008,17 @@ pub async fn compare_symbols(
     }
 
     // Calculate correlation matrix
-    for symbol1 in symbols.iter() {
+    for symbol1 in &symbols {
         let mut correlations = serde_json::Map::new();
-        if let Some(returns1) = all_returns.get(*symbol1) {
-            for symbol2 in symbols.iter() {
-                if let Some(returns2) = all_returns.get(*symbol2) {
+        if let Some(returns1) = all_returns.get(symbol1) {
+            for symbol2 in &symbols {
+                if let Some(returns2) = all_returns.get(symbol2) {
                     let correlation = calculate_correlation(returns1, returns2);
-                    correlations.insert(symbol2.to_string(), serde_json::json!(correlation));
+                    correlations.insert(symbol2.clone(), serde_json::json!(correlation));
                 }
             }
         }
-        correlation_matrix.insert(symbol1.to_string(), serde_json::json!(correlations));
+        correlation_matrix.insert(symbol1.clone(), serde_json::json!(correlations));
     }
 
     let response = serde_json::json!({
@@ -1228,45 +1394,50 @@ fn calculate_bollinger_bands_safe(prices: &[f64], period: usize, std_dev: f64) -
     let mut upper = Vec::new();
     let mut lower = Vec::new();
     
-    for (i, &middle) in sma.iter().enumerate() {
-        let start_idx = i + period - 1;
-        let end_idx = start_idx + 1;
+    // For each SMA value, calculate the corresponding Bollinger Bands
+    // In calculate_sma_safe: for price index i (where i >= period-1),
+    // SMA is calculated from prices[(i-period+1)..=i] which has 'period' elements
+    // This SMA value is stored at index (i - (period-1)) in the SMA array
+    // So SMA[sma_idx] corresponds to prices[sma_idx..sma_idx+period]
+    for (sma_idx, &middle) in sma.iter().enumerate() {
+        // Get the same price slice that was used to calculate this SMA value
+        let slice_start = sma_idx;
+        let slice_end = std::cmp::min(sma_idx + period, prices.len());
         
-        if end_idx <= prices.len() && start_idx < prices.len() {
-            // Saturating arithmetic to prevent underflow
-            let slice_start = start_idx.saturating_sub(period.saturating_sub(1));
-            let slice_end = std::cmp::min(end_idx, prices.len());
+        if slice_start >= prices.len() || slice_end > prices.len() || slice_start >= slice_end {
+            // Fallback: use middle value if we can't calculate properly
+            upper.push(middle);
+            lower.push(middle);
+            continue;
+        }
+        
+        let slice = &prices[slice_start..slice_end];
+        
+        // Need at least half the period for meaningful calculation
+        if slice.len() >= period / 2 {
+            let valid_slice: Vec<f64> = slice.iter()
+                .filter(|&&x| x.is_finite() && x > 0.0)
+                .cloned()
+                .collect();
             
-            if slice_start >= prices.len() || slice_end > prices.len() || slice_start >= slice_end {
-                continue;
-            }
-            
-            let slice = &prices[slice_start..slice_end];
-            
-            if slice.len() >= period * 2 / 3 { // Allow some tolerance for missing data
-                let valid_slice: Vec<f64> = slice.iter()
-                    .filter(|&&x| x.is_finite() && x > 0.0)
-                    .cloned()
-                    .collect();
-                
-                if valid_slice.len() >= period / 2 && middle.is_finite() && middle > 0.0 {
-                    let variance = valid_slice.iter()
-                        .map(|&x| (x - middle).powi(2))
-                        .sum::<f64>() / valid_slice.len() as f64;
+            if valid_slice.len() >= period / 2 && middle.is_finite() && middle > 0.0 {
+                // Calculate standard deviation using the same period as the SMA
+                let variance = valid_slice.iter()
+                    .map(|&x| {
+                        let diff = x - middle;
+                        diff * diff  // More efficient than powi(2)
+                    })
+                    .sum::<f64>() / valid_slice.len() as f64;
                     
-                    if variance.is_finite() && variance >= 0.0 {
-                        let std = variance.sqrt();
-                        if std.is_finite() && std >= 0.0 {
-                            let upper_band = middle + (std_dev * std);
-                            let lower_band = middle - (std_dev * std);
-                            
-                            if upper_band.is_finite() && lower_band.is_finite() && upper_band > lower_band {
-                                upper.push(upper_band);
-                                lower.push(lower_band);
-                            } else {
-                                upper.push(middle);
-                                lower.push(middle);
-                            }
+                if variance.is_finite() && variance >= 0.0 {
+                    let std = variance.sqrt();
+                    if std.is_finite() && std >= 0.0 {
+                        let upper_band = middle + (std_dev * std);
+                        let lower_band = middle - (std_dev * std);
+                        
+                        if upper_band.is_finite() && lower_band.is_finite() && upper_band > lower_band {
+                            upper.push(upper_band);
+                            lower.push(lower_band);
                         } else {
                             upper.push(middle);
                             lower.push(middle);
@@ -1279,7 +1450,14 @@ fn calculate_bollinger_bands_safe(prices: &[f64], period: usize, std_dev: f64) -
                     upper.push(middle);
                     lower.push(middle);
                 }
+            } else {
+                upper.push(middle);
+                lower.push(middle);
             }
+        } else {
+            // Not enough data in slice
+            upper.push(middle);
+            lower.push(middle);
         }
     }
     
@@ -1613,11 +1791,12 @@ pub async fn handler_404() -> (StatusCode, Json<ApiResponse<()>>) {
 // Cache cleanup endpoint (admin only)
 pub async fn cleanup_cache(
     State(service): State<AppState>,
+    headers: HeaderMap,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
-    let client_id = get_client_id();
+    let client_id = get_client_id(&headers);
     
     // Check rate limit
-    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id) {
+    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
 
