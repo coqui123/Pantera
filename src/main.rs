@@ -4,7 +4,7 @@ use axum::{
         header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
         HeaderValue, Method,
     },
-    routing::{get, post},
+    routing::{delete, get, post, put},
     Router,
 };
 use std::sync::Arc;
@@ -34,6 +34,8 @@ use handlers::{
     get_price_analysis, get_database_stats, get_comprehensive_quote,
     get_extended_quote_data, handler_404, cleanup_cache,
     get_technical_indicators, compare_symbols,
+    get_portfolio, add_portfolio_holding, update_portfolio_holding,
+    delete_portfolio_holding, update_portfolio_prices,
 };
 use yahoo_service::YahooFinanceService;
 
@@ -78,6 +80,50 @@ async fn main() -> Result<()> {
             interval.tick().await;
             cleanup_service.cleanup_cache();
             info!("🧹 Cache cleanup completed");
+        }
+    });
+
+    // Start background portfolio price update task (every 5 minutes)
+    let portfolio_service = yahoo_service.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(300)); // 5 minutes
+        loop {
+            interval.tick().await;
+            info!("📊 Updating portfolio prices...");
+            match portfolio_service.db.get_all_portfolio_holdings().await {
+                Ok(holdings) => {
+                    let total = holdings.len();
+                    let mut updated = 0;
+                    for holding in holdings {
+                        // Get current quote
+                        if let Ok(Some(quote)) = portfolio_service.get_latest_quote(&holding.symbol).await {
+                            let current_price = quote.price;
+                            let current_value = current_price * holding.quantity;
+                            let total_cost = holding.purchase_price * holding.quantity;
+                            let gain_loss = current_value - total_cost;
+                            let gain_loss_percent = if total_cost > rust_decimal::Decimal::ZERO {
+                                (gain_loss / total_cost) * rust_decimal::Decimal::from(100)
+                            } else {
+                                rust_decimal::Decimal::ZERO
+                            };
+
+                            if let Ok(_) = portfolio_service.db.update_portfolio_holding_prices(
+                                holding.id,
+                                current_price,
+                                current_value,
+                                gain_loss,
+                                gain_loss_percent,
+                            ).await {
+                                updated += 1;
+                            }
+                        }
+                    }
+                    info!("✅ Portfolio prices updated: {}/{} holdings", updated, total);
+                }
+                Err(e) => {
+                    warn!("Failed to update portfolio prices: {:?}", e);
+                }
+            }
         }
     });
 
@@ -136,6 +182,13 @@ async fn main() -> Result<()> {
         
         // Statistics and monitoring
         .route("/api/stats", get(get_database_stats))
+        
+        // Portfolio endpoints
+        .route("/api/portfolio", get(get_portfolio))
+        .route("/api/portfolio/holdings", post(add_portfolio_holding))
+        .route("/api/portfolio/holdings/:holding_id", put(update_portfolio_holding))
+        .route("/api/portfolio/holdings/:holding_id", delete(delete_portfolio_holding))
+        .route("/api/portfolio/update-prices", post(update_portfolio_prices))
         
         // Admin endpoints
         .route("/api/admin/cache/cleanup", post(cleanup_cache));

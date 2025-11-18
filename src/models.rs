@@ -271,6 +271,58 @@ impl RealTimeQuote {
     }
 }
 
+// Portfolio models
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortfolioHolding {
+    pub id: Uuid,
+    pub symbol: String,
+    pub symbol_id: Option<Uuid>,
+    pub asset_type: String, // "stock", "etf", "crypto"
+    pub quantity: Decimal,
+    pub purchase_price: Decimal,
+    pub current_price: Option<Decimal>,
+    pub current_value: Option<Decimal>,
+    pub gain_loss: Option<Decimal>,
+    pub gain_loss_percent: Option<Decimal>,
+    pub last_updated: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortfolioHoldingWithQuote {
+    pub holding: PortfolioHolding,
+    pub quote: Option<RealTimeQuote>,
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortfolioSummary {
+    pub total_holdings: usize,
+    pub total_cost: Decimal,
+    pub total_value: Decimal,
+    pub total_gain_loss: Decimal,
+    pub total_gain_loss_percent: Decimal,
+    pub holdings: Vec<PortfolioHoldingWithQuote>,
+    pub last_updated: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddHoldingRequest {
+    pub symbol: String,
+    #[serde(default)]
+    pub asset_type: Option<String>, // Optional: "stock", "etf", "crypto" - auto-detected if not provided
+    pub quantity: Decimal,
+    #[serde(default)]
+    pub purchase_price: Option<Decimal>, // Optional: will use current price if not provided
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateHoldingRequest {
+    pub quantity: Option<Decimal>,
+    pub purchase_price: Option<Decimal>,
+}
+
 // Rate limiting configuration
 #[derive(Debug, Clone)]
 pub struct RateLimitConfig {

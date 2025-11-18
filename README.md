@@ -33,6 +33,7 @@ A high-performance, production-ready Yahoo Finance data service built with Rust.
 - **📊 Analytics Suite**: Technical analysis tools (RSI, MACD, SMA, EMA, Bollinger Bands)
 - **📱 Responsive Design**: Modern UI optimized for desktop and mobile devices
 - **⚡ Real-time Updates**: Live data visualization with interactive controls
+- **💼 Portfolio Tracking**: Personal portfolio management with automatic price updates
 
 ### Performance Optimizations
 - **🐄 Cow (Clone on Write)**: Zero-copy string operations for 50-80% memory reduction
@@ -53,6 +54,7 @@ A high-performance, production-ready Yahoo Finance data service built with Rust.
 - [Quick Start](#quick-start)
 - [Installation & Setup](#installation--setup)
 - [Web Interface](#web-interface)
+- [Portfolio Management](#portfolio-management)
 - [Configuration](#configuration)
 - [API Documentation](#api-documentation)
 - [Performance Optimizations](#performance-optimizations)
@@ -111,6 +113,14 @@ curl "http://localhost:3000/api/symbols/search?q=apple"
 
 # Access web interface (if enabled)
 open http://localhost:3000/ui
+
+# Add a holding to your portfolio
+curl -X POST http://localhost:3000/api/portfolio/holdings \
+  -H "Content-Type: application/json" \
+  -d '{"symbol": "AAPL", "quantity": 10}'
+
+# View your portfolio
+curl http://localhost:3000/api/portfolio
 ```
 
 ## 📦 Installation & Setup
@@ -219,6 +229,167 @@ When enabled with `--features web-ui`, the service provides a comprehensive web 
 - **Multiple Timeframes**: 5m, 15m, 30m, 1h, 1d, 1wk, 1mo
 - **Risk Metrics**: Sharpe ratio, Value at Risk, drawdown analysis
 - **Export Options**: CSV, JSON, PDF report generation
+
+## 💼 Portfolio Management
+
+The Mango Data Service includes a comprehensive portfolio tracking feature that allows you to manage your investments directly from the dashboard.
+
+### Portfolio Features
+
+- **📊 Multi-Asset Support**: Track stocks, ETFs, and cryptocurrencies in one portfolio
+- **💰 Automatic Price Updates**: Real-time price updates every 5 minutes via background tasks
+- **📈 Gain/Loss Tracking**: Automatic calculation of profit/loss in both dollar and percentage terms
+- **🔄 Smart Merging**: Duplicate tickers are automatically combined with weighted average purchase prices
+- **💾 Persistent Storage**: All portfolio data is saved in the database and persists between restarts
+- **⚡ Auto-Refresh**: Frontend automatically updates every 30 seconds to show latest prices
+- **🎯 Simple Input**: Just enter ticker symbol and quantity - purchase price is optional (uses current market price if not provided)
+
+### Using the Portfolio Feature
+
+#### Adding Holdings
+
+1. **Access Portfolio**: Navigate to the dashboard at `http://localhost:3000/ui`
+2. **Add Holding**: Click "Add Holding" button in the Portfolio section
+3. **Enter Details**:
+   - **Symbol/Ticker**: Enter any ticker (e.g., AAPL, MSFT, BTC-USD)
+   - **Quantity**: Number of shares/coins you own
+   - **Purchase Price** (Optional): Leave empty to use current market price
+4. **Submit**: Click "Add Holding" to save
+
+#### Portfolio Features
+
+- **Automatic Merging**: If you add the same ticker multiple times, holdings are automatically combined:
+  - Quantities are added together
+  - Purchase prices are averaged using weighted average calculation
+  - Example: 10 shares @ $5 + 10 shares @ $10 = 20 shares @ $7.50 average
+
+- **Real-time Updates**:
+  - Backend updates prices every 5 minutes automatically
+  - Frontend refreshes display every 30 seconds
+  - Auto-refresh pauses when you're filling out the form
+
+- **Portfolio Summary**:
+  - Total cost basis
+  - Current portfolio value
+  - Total gain/loss (dollar and percentage)
+  - Individual holding details with current prices
+
+### Portfolio API Endpoints
+
+#### Get Portfolio Summary
+```http
+GET /api/portfolio
+```
+Returns complete portfolio with all holdings, current prices, and gain/loss calculations.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "total_holdings": 5,
+    "total_cost": 10000.00,
+    "total_value": 10500.00,
+    "total_gain_loss": 500.00,
+    "total_gain_loss_percent": 5.00,
+    "holdings": [
+      {
+        "holding": {
+          "id": "uuid",
+          "symbol": "AAPL",
+          "quantity": 10.0,
+          "purchase_price": 150.00,
+          "current_price": 155.00,
+          "current_value": 1550.00,
+          "gain_loss": 50.00,
+          "gain_loss_percent": 3.33
+        },
+        "quote": { /* real-time quote data */ },
+        "name": "Apple Inc."
+      }
+    ],
+    "last_updated": "2024-01-01T12:00:00Z"
+  }
+}
+```
+
+#### Add Holding
+```http
+POST /api/portfolio/holdings
+Content-Type: application/json
+
+{
+  "symbol": "AAPL",
+  "quantity": 10.0,
+  "purchase_price": 150.00  // Optional - uses current price if omitted
+}
+```
+
+**Features:**
+- Auto-detects asset type (stock/ETF/crypto)
+- Merges with existing holdings if symbol already exists
+- Calculates weighted average purchase price automatically
+- Updates prices immediately after adding
+
+#### Update Holding
+```http
+PUT /api/portfolio/holdings/{holding_id}
+Content-Type: application/json
+
+{
+  "quantity": 15.0,           // Optional
+  "purchase_price": 160.00    // Optional
+}
+```
+
+#### Delete Holding
+```http
+DELETE /api/portfolio/holdings/{holding_id}
+```
+
+#### Manual Price Update
+```http
+POST /api/portfolio/update-prices
+```
+Manually triggers price update for all holdings.
+
+### Portfolio Database
+
+Portfolio data is stored in the `portfolio_holdings` table:
+
+- **Persistent Storage**: Data survives server restarts
+- **Automatic Updates**: Background task updates prices every 5 minutes
+- **Data Integrity**: Foreign key relationships with symbols table
+- **Indexed**: Fast lookups by symbol and asset type
+
+### Portfolio Best Practices
+
+1. **Regular Updates**: Prices update automatically, but you can manually refresh anytime
+2. **Accurate Purchase Prices**: Enter purchase prices for accurate gain/loss calculations
+3. **Multiple Purchases**: Add the same ticker multiple times - they'll be automatically merged
+4. **Portfolio Monitoring**: Check the dashboard regularly to track your investments
+5. **Data Backup**: The database file (`data/data.db`) contains all your portfolio data
+
+### Example Workflow
+
+```bash
+# 1. Start the service
+cargo run --features web-ui
+
+# 2. Access dashboard
+open http://localhost:3000/ui
+
+# 3. Add holdings via web interface or API
+curl -X POST http://localhost:3000/api/portfolio/holdings \
+  -H "Content-Type: application/json" \
+  -d '{"symbol": "AAPL", "quantity": 10, "purchase_price": 150.00}'
+
+# 4. View portfolio
+curl http://localhost:3000/api/portfolio
+
+# 5. Portfolio auto-updates every 5 minutes
+# Frontend refreshes every 30 seconds
+```
 
 ### Key Web Features
 
@@ -448,6 +619,49 @@ GET /api/symbols/AAPL/analysis?limit=30
 - **Parameters**: `limit` (days to analyze, max 365)
 - **Returns**: Volatility, price changes, volume metrics
 - **Optimizations**: Parallel calculations, cached intermediate results
+
+### Portfolio Endpoints
+
+#### Get Portfolio
+```http
+GET /api/portfolio
+```
+Returns complete portfolio summary with all holdings, current prices, and gain/loss calculations.
+
+#### Add Holding
+```http
+POST /api/portfolio/holdings
+Content-Type: application/json
+
+{
+  "symbol": "AAPL",
+  "quantity": 10.0,
+  "purchase_price": 150.00  // Optional
+}
+```
+Adds a new holding or merges with existing holding if symbol already exists.
+
+#### Update Holding
+```http
+PUT /api/portfolio/holdings/{holding_id}
+Content-Type: application/json
+
+{
+  "quantity": 15.0,        // Optional
+  "purchase_price": 160.00 // Optional
+}
+```
+
+#### Delete Holding
+```http
+DELETE /api/portfolio/holdings/{holding_id}
+```
+
+#### Update Portfolio Prices
+```http
+POST /api/portfolio/update-prices
+```
+Manually triggers price update for all holdings.
 
 ### System Endpoints
 

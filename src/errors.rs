@@ -2,6 +2,7 @@ use thiserror::Error;
 
 /// Internal error types - detailed for logging and debugging
 #[derive(Debug, Error)]
+#[allow(dead_code)] // Some variants are reserved for future use
 pub enum InternalError {
     #[error("Database error: {0}")]
     Database(#[from] anyhow::Error),

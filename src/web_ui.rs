@@ -3,10 +3,7 @@ use askama::Template;
 #[cfg(feature = "web-ui")]
 use askama_axum::IntoResponse;
 #[cfg(feature = "web-ui")]
-use axum::{
-    extract::Query,
-    response::Html,
-};
+use axum::extract::Query;
 #[cfg(feature = "web-ui")]
 use serde::Deserialize;
 

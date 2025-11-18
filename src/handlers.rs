@@ -15,7 +15,10 @@ use crate::config::{
     MIN_TECHNICAL_INDICATOR_PERIODS, DEFAULT_HISTORICAL_LIMIT,
 };
 use crate::errors::{ExternalError, InternalError};
-use crate::models::{ApiResponse, HistoricalResponse, ProfileResponse, QuoteResponse, Symbol};
+use crate::models::{
+    AddHoldingRequest, ApiResponse, HistoricalResponse, PortfolioHoldingWithQuote,
+    PortfolioSummary, ProfileResponse, QuoteResponse, Symbol, UpdateHoldingRequest,
+};
 use crate::validation::{validate_date_range, validate_limit, validate_search_query};
 use crate::yahoo_service::{YahooFinanceService, YahooServiceError};
 
@@ -1778,6 +1781,335 @@ fn calculate_trend_strength_safe(prices: &[f64], sma: &[f64]) -> &'static str {
     } else {
         "Unknown"
     }
+}
+
+// Portfolio handlers
+pub async fn get_portfolio(
+    State(service): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse<PortfolioSummary>>, StatusCode> {
+    let client_id = get_client_id(&headers);
+    
+    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id).await {
+        return Err(StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    match service.db.get_all_portfolio_holdings().await {
+        Ok(holdings) => {
+            let mut holdings_with_quotes = Vec::new();
+            let mut total_cost = rust_decimal::Decimal::ZERO;
+            let mut total_value = rust_decimal::Decimal::ZERO;
+
+            for holding in holdings {
+                total_cost += holding.purchase_price * holding.quantity;
+                
+                // Try to get current quote
+                let quote = service.get_latest_quote(&holding.symbol).await.ok().flatten();
+                
+                // Get symbol name
+                let symbol_info = service.db.get_symbol_id(&holding.symbol).await.ok().flatten();
+                let name = if let Some(symbol_id) = symbol_info {
+                    if let Ok(symbols) = service.db.get_all_symbols().await {
+                        symbols.iter()
+                            .find(|s| s.id == symbol_id)
+                            .and_then(|s| s.name.clone())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                let current_value = holding.current_value.unwrap_or_else(|| {
+                    quote.as_ref()
+                        .map(|q| q.price * holding.quantity)
+                        .unwrap_or_else(|| holding.purchase_price * holding.quantity)
+                });
+                
+                total_value += current_value;
+
+                holdings_with_quotes.push(PortfolioHoldingWithQuote {
+                    holding,
+                    quote,
+                    name,
+                });
+            }
+
+            let total_gain_loss = total_value - total_cost;
+            let total_gain_loss_percent = if total_cost > rust_decimal::Decimal::ZERO {
+                (total_gain_loss / total_cost) * rust_decimal::Decimal::from(100)
+            } else {
+                rust_decimal::Decimal::ZERO
+            };
+
+            let summary = PortfolioSummary {
+                total_holdings: holdings_with_quotes.len(),
+                total_cost,
+                total_value,
+                total_gain_loss,
+                total_gain_loss_percent,
+                holdings: holdings_with_quotes,
+                last_updated: Some(Utc::now()),
+            };
+
+            Ok(Json(ApiResponse::success(summary)))
+        }
+        Err(e) => {
+            error!("Error fetching portfolio: {:?}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+pub async fn add_portfolio_holding(
+    State(service): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<AddHoldingRequest>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
+    let client_id = get_client_id(&headers);
+    
+    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id).await {
+        return Err(StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    // Validate symbol
+    let symbol_upper = request.symbol.to_uppercase();
+    if let Err(_) = crate::validation::validate_symbol(&symbol_upper) {
+        return Ok(Json(ApiResponse::error(Cow::Borrowed(
+            "Invalid or unsupported symbol"
+        ))));
+    }
+    
+    // Auto-detect asset type if not provided (default to "stock")
+    let asset_type = request.asset_type.unwrap_or_else(|| {
+        // Simple heuristic: if symbol contains "-" it might be crypto (e.g., BTC-USD)
+        if symbol_upper.contains("-") {
+            "crypto".to_string()
+        } else {
+            "stock".to_string()
+        }
+    });
+
+    // Get current price if purchase_price not provided
+    let purchase_price = if let Some(price) = request.purchase_price {
+        price
+    } else {
+        // Try to get current price from Yahoo Finance
+        match service.get_latest_quote(&symbol_upper).await {
+            Ok(Some(quote)) => quote.price,
+            _ => {
+                return Ok(Json(ApiResponse::error(Cow::Borrowed(
+                    "Could not fetch current price. Please provide a purchase price."
+                ))));
+            }
+        }
+    };
+
+    // Try to validate with Yahoo Finance (but don't fail if it doesn't work)
+    match service.validate_symbol(&symbol_upper).await {
+        Ok(valid) if !valid => {
+            warn!("Symbol {} not validated, but proceeding anyway", symbol_upper);
+        }
+        Err(_) => {
+            warn!("Could not validate symbol {}, proceeding anyway", symbol_upper);
+        }
+        _ => {}
+    }
+
+    // Check if holding with this symbol already exists
+    match service.db.get_portfolio_holding_by_symbol(&symbol_upper).await {
+        Ok(Some(existing_holding)) => {
+            // Merge with existing holding - calculate weighted average purchase price
+            match service.db.merge_portfolio_holding(
+                existing_holding.id,
+                request.quantity,
+                purchase_price,
+            ).await {
+                Ok(_) => {
+                    // Update prices immediately
+                    let _ = update_holding_prices(&service, existing_holding.id).await;
+                    
+                    Ok(Json(ApiResponse::success(serde_json::json!({
+                        "holding_id": existing_holding.id.to_string(),
+                        "message": "Holding updated - merged with existing position",
+                        "merged": true
+                    }))))
+                }
+                Err(e) => {
+                    error!("Error merging portfolio holding: {:?}", e);
+                    Err(StatusCode::INTERNAL_SERVER_ERROR)
+                }
+            }
+        }
+        Ok(None) => {
+            // No existing holding, create new one
+            match service.db.add_portfolio_holding(
+                &symbol_upper,
+                &asset_type,
+                request.quantity,
+                purchase_price,
+            ).await {
+                Ok(holding_id) => {
+                    // Try to update prices immediately
+                    let _ = update_holding_prices(&service, holding_id).await;
+                    
+                    Ok(Json(ApiResponse::success(serde_json::json!({
+                        "holding_id": holding_id.to_string(),
+                        "message": "Holding added successfully",
+                        "merged": false
+                    }))))
+                }
+                Err(e) => {
+                    error!("Error adding portfolio holding: {:?}", e);
+                    Err(StatusCode::INTERNAL_SERVER_ERROR)
+                }
+            }
+        }
+        Err(e) => {
+            error!("Error checking for existing holding: {:?}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+pub async fn update_portfolio_holding(
+    State(service): State<AppState>,
+    headers: HeaderMap,
+    Path(holding_id): Path<String>,
+    Json(request): Json<UpdateHoldingRequest>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
+    let client_id = get_client_id(&headers);
+    
+    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id).await {
+        return Err(StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    let holding_uuid = match uuid::Uuid::parse_str(&holding_id) {
+        Ok(uuid) => uuid,
+        Err(_) => {
+            return Ok(Json(ApiResponse::error(Cow::Borrowed("Invalid holding ID"))));
+        }
+    };
+
+    match service.db.update_portfolio_holding(
+        holding_uuid,
+        request.quantity,
+        request.purchase_price,
+    ).await {
+        Ok(_) => {
+            // Update prices after updating holding
+            let _ = update_holding_prices(&service, holding_uuid).await;
+            
+            Ok(Json(ApiResponse::success(serde_json::json!({
+                "message": "Holding updated successfully"
+            }))))
+        }
+        Err(e) => {
+            error!("Error updating portfolio holding: {:?}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+pub async fn delete_portfolio_holding(
+    State(service): State<AppState>,
+    headers: HeaderMap,
+    Path(holding_id): Path<String>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
+    let client_id = get_client_id(&headers);
+    
+    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id).await {
+        return Err(StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    let holding_uuid = match uuid::Uuid::parse_str(&holding_id) {
+        Ok(uuid) => uuid,
+        Err(_) => {
+            return Ok(Json(ApiResponse::error(Cow::Borrowed("Invalid holding ID"))));
+        }
+    };
+
+    match service.db.delete_portfolio_holding(holding_uuid).await {
+        Ok(_) => {
+            Ok(Json(ApiResponse::success(serde_json::json!({
+                "message": "Holding deleted successfully"
+            }))))
+        }
+        Err(e) => {
+            error!("Error deleting portfolio holding: {:?}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+pub async fn update_portfolio_prices(
+    State(service): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
+    let client_id = get_client_id(&headers);
+    
+    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id).await {
+        return Err(StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    match service.db.get_all_portfolio_holdings().await {
+        Ok(holdings) => {
+            let total = holdings.len();
+            let mut updated = 0;
+            for holding in holdings {
+                if let Ok(_) = update_holding_prices(&service, holding.id).await {
+                    updated += 1;
+                }
+            }
+            
+            Ok(Json(ApiResponse::success(serde_json::json!({
+                "updated": updated,
+                "total": total,
+                "message": "Portfolio prices updated"
+            }))))
+        }
+        Err(e) => {
+            error!("Error updating portfolio prices: {:?}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+// Helper function to update prices for a single holding
+async fn update_holding_prices(
+    service: &YahooFinanceService,
+    holding_id: uuid::Uuid,
+) -> Result<(), anyhow::Error> {
+    let holding = match service.db.get_portfolio_holding(holding_id).await? {
+        Some(h) => h,
+        None => return Err(anyhow::anyhow!("Holding not found")),
+    };
+
+    // Get current quote
+    let quote = match service.get_latest_quote(&holding.symbol).await {
+        Ok(Some(q)) => q,
+        _ => return Err(anyhow::anyhow!("Failed to get quote")),
+    };
+
+    let current_price = quote.price;
+    let current_value = current_price * holding.quantity;
+    let total_cost = holding.purchase_price * holding.quantity;
+    let gain_loss = current_value - total_cost;
+    let gain_loss_percent = if total_cost > rust_decimal::Decimal::ZERO {
+        (gain_loss / total_cost) * rust_decimal::Decimal::from(100)
+    } else {
+        rust_decimal::Decimal::ZERO
+    };
+
+    service.db.update_portfolio_holding_prices(
+        holding_id,
+        current_price,
+        current_value,
+        gain_loss,
+        gain_loss_percent,
+    ).await?;
+
+    Ok(())
 }
 
 // 404 handler

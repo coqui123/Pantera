@@ -1,5 +1,5 @@
-use crate::models::*;
-use anyhow::Result;
+use crate::models::{PortfolioHolding, *};
+use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Row, Sqlite};
@@ -22,18 +22,23 @@ impl Database {
 
             // If it's not an in-memory database, ensure the directory exists
             if file_path != ":memory:" && !file_path.is_empty() {
-                if let Some(parent) = std::path::Path::new(file_path).parent() {
-                    info!("Creating directory: {:?}", parent);
-                    std::fs::create_dir_all(parent)?;
-                    info!("Directory created successfully");
+                let db_path = std::path::Path::new(file_path);
+                
+                // Ensure the directory exists
+                if let Some(parent) = db_path.parent() {
+                    if !parent.exists() {
+                        info!("Creating directory: {:?}", parent);
+                        std::fs::create_dir_all(parent)?;
+                        info!("Directory created successfully");
+                    }
                 }
 
-                // Check if we can create the file
-                info!("Attempting to create database file: {}", file_path);
-                if let Err(e) = std::fs::File::create(file_path) {
-                    info!("Failed to create database file: {}", e);
+                // Check if database file exists, but don't create/truncate it
+                // SQLite will create it automatically if needed, and we don't want to overwrite existing data
+                if db_path.exists() {
+                    info!("Using existing database file: {}", file_path);
                 } else {
-                    info!("Database file created successfully");
+                    info!("Database file will be created at: {}", file_path);
                 }
             }
 
@@ -50,6 +55,14 @@ impl Database {
         let db = Database { pool };
         db.run_migrations().await?;
         db.create_indexes().await?;
+
+        // Verify portfolio data persistence by checking if we can read holdings
+        if let Ok(holdings) = db.get_all_portfolio_holdings().await {
+            info!("✅ Portfolio database initialized - {} holdings found", holdings.len());
+            if holdings.len() > 0 {
+                info!("📊 Portfolio holdings persisted successfully");
+            }
+        }
 
         Ok(db)
     }
@@ -152,6 +165,30 @@ impl Database {
         .execute(&self.pool)
         .await?;
 
+        // Create portfolio_holdings table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS portfolio_holdings (
+                id TEXT PRIMARY KEY,
+                symbol TEXT NOT NULL,
+                symbol_id TEXT,
+                asset_type TEXT NOT NULL,
+                quantity TEXT NOT NULL,
+                purchase_price TEXT NOT NULL,
+                current_price TEXT,
+                current_value TEXT,
+                gain_loss TEXT,
+                gain_loss_percent TEXT,
+                last_updated TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (symbol_id) REFERENCES symbols (id)
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
         info!("Database migrations completed successfully");
         Ok(())
     }
@@ -167,6 +204,8 @@ impl Database {
             "CREATE INDEX IF NOT EXISTS idx_realtime_quotes_symbol ON realtime_quotes (symbol)",
             "CREATE INDEX IF NOT EXISTS idx_realtime_quotes_market_time ON realtime_quotes (market_time)",
             "CREATE INDEX IF NOT EXISTS idx_company_profiles_symbol ON company_profiles (symbol)",
+            "CREATE INDEX IF NOT EXISTS idx_portfolio_holdings_symbol ON portfolio_holdings (symbol)",
+            "CREATE INDEX IF NOT EXISTS idx_portfolio_holdings_asset_type ON portfolio_holdings (asset_type)",
         ];
 
         for index in indexes {
@@ -558,5 +597,277 @@ impl Database {
             "company_profiles": profiles_count,
             "timestamp": Utc::now()
         }))
+    }
+
+    // Portfolio operations
+    pub async fn add_portfolio_holding(
+        &self,
+        symbol: &str,
+        asset_type: &str,
+        quantity: Decimal,
+        purchase_price: Decimal,
+    ) -> Result<Uuid> {
+        let holding_id = Uuid::new_v4();
+        let now = Utc::now();
+        
+        // Try to get symbol_id if symbol exists
+        let symbol_id = self.get_symbol_id(symbol).await.ok().flatten();
+
+        sqlx::query(
+            r#"
+            INSERT INTO portfolio_holdings 
+            (id, symbol, symbol_id, asset_type, quantity, purchase_price, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            "#,
+        )
+        .bind(holding_id.to_string())
+        .bind(symbol)
+        .bind(symbol_id.map(|id| id.to_string()))
+        .bind(asset_type)
+        .bind(quantity.to_string())
+        .bind(purchase_price.to_string())
+        .bind(now.to_rfc3339())
+        .bind(now.to_rfc3339())
+        .execute(&self.pool)
+        .await?;
+
+        Ok(holding_id)
+    }
+
+    pub async fn get_all_portfolio_holdings(&self) -> Result<Vec<PortfolioHolding>> {
+        let rows = sqlx::query(
+            "SELECT id, symbol, symbol_id, asset_type, quantity, purchase_price, 
+             current_price, current_value, gain_loss, gain_loss_percent, last_updated, 
+             created_at, updated_at 
+             FROM portfolio_holdings ORDER BY created_at DESC"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut holdings = Vec::new();
+        for row in rows {
+            holdings.push(PortfolioHolding {
+                id: Uuid::from_str(&row.get::<String, _>(0))?,
+                symbol: row.get(1),
+                symbol_id: row.get::<Option<String>, _>(2)
+                    .and_then(|s| Uuid::from_str(&s).ok()),
+                asset_type: row.get(3),
+                quantity: Decimal::from_str(&row.get::<String, _>(4))?,
+                purchase_price: Decimal::from_str(&row.get::<String, _>(5))?,
+                current_price: row.get::<Option<String>, _>(6)
+                    .and_then(|s| Decimal::from_str(&s).ok()),
+                current_value: row.get::<Option<String>, _>(7)
+                    .and_then(|s| Decimal::from_str(&s).ok()),
+                gain_loss: row.get::<Option<String>, _>(8)
+                    .and_then(|s| Decimal::from_str(&s).ok()),
+                gain_loss_percent: row.get::<Option<String>, _>(9)
+                    .and_then(|s| Decimal::from_str(&s).ok()),
+                last_updated: row.get::<Option<String>, _>(10)
+                    .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
+                    .map(|dt| dt.with_timezone(&Utc)),
+                created_at: DateTime::parse_from_rfc3339(&row.get::<String, _>(11))?
+                    .with_timezone(&Utc),
+                updated_at: DateTime::parse_from_rfc3339(&row.get::<String, _>(12))?
+                    .with_timezone(&Utc),
+            });
+        }
+
+        Ok(holdings)
+    }
+
+    pub async fn get_portfolio_holding(&self, holding_id: Uuid) -> Result<Option<PortfolioHolding>> {
+        let row = sqlx::query(
+            "SELECT id, symbol, symbol_id, asset_type, quantity, purchase_price, 
+             current_price, current_value, gain_loss, gain_loss_percent, last_updated, 
+             created_at, updated_at 
+             FROM portfolio_holdings WHERE id = ?1"
+        )
+        .bind(holding_id.to_string())
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = row {
+            Ok(Some(PortfolioHolding {
+                id: Uuid::from_str(&row.get::<String, _>(0))?,
+                symbol: row.get(1),
+                symbol_id: row.get::<Option<String>, _>(2)
+                    .and_then(|s| Uuid::from_str(&s).ok()),
+                asset_type: row.get(3),
+                quantity: Decimal::from_str(&row.get::<String, _>(4))?,
+                purchase_price: Decimal::from_str(&row.get::<String, _>(5))?,
+                current_price: row.get::<Option<String>, _>(6)
+                    .and_then(|s| Decimal::from_str(&s).ok()),
+                current_value: row.get::<Option<String>, _>(7)
+                    .and_then(|s| Decimal::from_str(&s).ok()),
+                gain_loss: row.get::<Option<String>, _>(8)
+                    .and_then(|s| Decimal::from_str(&s).ok()),
+                gain_loss_percent: row.get::<Option<String>, _>(9)
+                    .and_then(|s| Decimal::from_str(&s).ok()),
+                last_updated: row.get::<Option<String>, _>(10)
+                    .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
+                    .map(|dt| dt.with_timezone(&Utc)),
+                created_at: DateTime::parse_from_rfc3339(&row.get::<String, _>(11))?
+                    .with_timezone(&Utc),
+                updated_at: DateTime::parse_from_rfc3339(&row.get::<String, _>(12))?
+                    .with_timezone(&Utc),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn get_portfolio_holding_by_symbol(&self, symbol: &str) -> Result<Option<PortfolioHolding>> {
+        let row = sqlx::query(
+            "SELECT id, symbol, symbol_id, asset_type, quantity, purchase_price, 
+             current_price, current_value, gain_loss, gain_loss_percent, last_updated, 
+             created_at, updated_at 
+             FROM portfolio_holdings WHERE symbol = ?1 LIMIT 1"
+        )
+        .bind(symbol)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = row {
+            Ok(Some(PortfolioHolding {
+                id: Uuid::from_str(&row.get::<String, _>(0))?,
+                symbol: row.get(1),
+                symbol_id: row.get::<Option<String>, _>(2)
+                    .and_then(|s| Uuid::from_str(&s).ok()),
+                asset_type: row.get(3),
+                quantity: Decimal::from_str(&row.get::<String, _>(4))?,
+                purchase_price: Decimal::from_str(&row.get::<String, _>(5))?,
+                current_price: row.get::<Option<String>, _>(6)
+                    .and_then(|s| Decimal::from_str(&s).ok()),
+                current_value: row.get::<Option<String>, _>(7)
+                    .and_then(|s| Decimal::from_str(&s).ok()),
+                gain_loss: row.get::<Option<String>, _>(8)
+                    .and_then(|s| Decimal::from_str(&s).ok()),
+                gain_loss_percent: row.get::<Option<String>, _>(9)
+                    .and_then(|s| Decimal::from_str(&s).ok()),
+                last_updated: row.get::<Option<String>, _>(10)
+                    .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
+                    .map(|dt| dt.with_timezone(&Utc)),
+                created_at: DateTime::parse_from_rfc3339(&row.get::<String, _>(11))?
+                    .with_timezone(&Utc),
+                updated_at: DateTime::parse_from_rfc3339(&row.get::<String, _>(12))?
+                    .with_timezone(&Utc),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn update_portfolio_holding(
+        &self,
+        holding_id: Uuid,
+        quantity: Option<Decimal>,
+        purchase_price: Option<Decimal>,
+    ) -> Result<()> {
+        let now = Utc::now();
+        let mut updates = Vec::new();
+        let mut bind_values: Vec<String> = Vec::new();
+
+        if let Some(qty) = quantity {
+            updates.push("quantity = ?");
+            bind_values.push(qty.to_string());
+        }
+        if let Some(price) = purchase_price {
+            updates.push("purchase_price = ?");
+            bind_values.push(price.to_string());
+        }
+
+        if updates.is_empty() {
+            return Ok(());
+        }
+
+        updates.push("updated_at = ?");
+        bind_values.push(now.to_rfc3339());
+        bind_values.push(holding_id.to_string());
+
+        let query = format!(
+            "UPDATE portfolio_holdings SET {} WHERE id = ?",
+            updates.join(", ")
+        );
+
+        let mut sqlx_query = sqlx::query(&query);
+        for value in bind_values.iter() {
+            sqlx_query = sqlx_query.bind(value);
+        }
+
+        sqlx_query.execute(&self.pool).await?;
+
+        Ok(())
+    }
+
+    pub async fn merge_portfolio_holding(
+        &self,
+        holding_id: Uuid,
+        new_quantity: Decimal,
+        new_purchase_price: Decimal,
+    ) -> Result<()> {
+        // Get existing holding
+        let existing = match self.get_portfolio_holding(holding_id).await? {
+            Some(h) => h,
+            None => return Err(anyhow::anyhow!("Holding not found")),
+        };
+
+        // Calculate weighted average purchase price
+        let old_total_cost = existing.purchase_price * existing.quantity;
+        let new_total_cost = new_purchase_price * new_quantity;
+        let combined_quantity = existing.quantity + new_quantity;
+        let average_purchase_price = if combined_quantity > rust_decimal::Decimal::ZERO {
+            (old_total_cost + new_total_cost) / combined_quantity
+        } else {
+            new_purchase_price
+        };
+
+        // Update the holding with merged values
+        self.update_portfolio_holding(
+            holding_id,
+            Some(combined_quantity),
+            Some(average_purchase_price),
+        ).await?;
+
+        Ok(())
+    }
+
+    pub async fn update_portfolio_holding_prices(
+        &self,
+        holding_id: Uuid,
+        current_price: Decimal,
+        current_value: Decimal,
+        gain_loss: Decimal,
+        gain_loss_percent: Decimal,
+    ) -> Result<()> {
+        let now = Utc::now();
+
+        sqlx::query(
+            r#"
+            UPDATE portfolio_holdings 
+            SET current_price = ?1, current_value = ?2, gain_loss = ?3, 
+                gain_loss_percent = ?4, last_updated = ?5, updated_at = ?6
+            WHERE id = ?7
+            "#,
+        )
+        .bind(current_price.to_string())
+        .bind(current_value.to_string())
+        .bind(gain_loss.to_string())
+        .bind(gain_loss_percent.to_string())
+        .bind(now.to_rfc3339())
+        .bind(now.to_rfc3339())
+        .bind(holding_id.to_string())
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn delete_portfolio_holding(&self, holding_id: Uuid) -> Result<()> {
+        sqlx::query("DELETE FROM portfolio_holdings WHERE id = ?1")
+            .bind(holding_id.to_string())
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
     }
 }
