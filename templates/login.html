@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Mango Data Service</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/@airgap/beacon-sdk@3.1.2/dist/walletbeacon.min.js"></script>
+    <style>
+        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .card-hover { transition: all 0.3s ease; }
+        .card-hover:hover { transform: translateY(-5px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); }
+        .loading { display: inline-block; width: 20px; height: 20px; border: 3px solid #f3f3f3; border-radius: 50%; border-top-color: #3498db; animation: spin 1s ease-in-out infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center">
+    <div class="max-w-md w-full mx-4">
+        <div class="gradient-bg rounded-lg shadow-xl p-8 mb-6 text-white text-center">
+            <h1 class="text-3xl font-bold mb-2">🥭 Mango Data Service</h1>
+            <p class="text-white text-opacity-90">Admin Authentication</p>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-8 card-hover">
+            <h2 class="text-2xl font-semibold mb-6 text-gray-800 text-center">
+                <i class="fas fa-wallet text-purple-500 mr-2"></i>Tezos Wallet Login
+            </h2>
+
+            <div id="loginStatus" class="mb-6"></div>
+
+            <div id="loginForm">
+                <p class="text-gray-600 mb-6 text-center">
+                    Connect your Tezos wallet to sign in as an admin. You'll be asked to sign a message to verify your identity.
+                </p>
+
+                <button id="connectWalletBtn" 
+                        onclick="connectWallet()"
+                        class="w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-3 px-6 rounded-lg transition duration-200 mb-4">
+                    <i class="fas fa-wallet mr-2"></i>Connect Tezos Wallet
+                </button>
+
+                <div id="walletInfo" class="hidden mb-4 p-4 bg-gray-50 rounded-lg">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-medium text-gray-700">Connected Wallet:</span>
+                        <span id="walletAddress" class="text-sm text-gray-600 font-mono"></span>
+                    </div>
+                </div>
+
+                <button id="signInBtn" 
+                        onclick="signIn()"
+                        class="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-3 px-6 rounded-lg transition duration-200 hidden">
+                    <i class="fas fa-sign-in-alt mr-2"></i>Sign In
+                </button>
+            </div>
+
+            <div id="errorMessage" class="hidden mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div class="flex items-center">
+                    <i class="fas fa-exclamation-circle text-red-500 mr-2"></i>
+                    <span id="errorText" class="text-red-700 text-sm"></span>
+                </div>
+            </div>
+
+            <div class="mt-6 pt-6 border-t border-gray-200">
+                <p class="text-xs text-gray-500 text-center">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    Only authorized Tezos addresses can access the admin panel.
+                </p>
+            </div>
+        </div>
+
+        <div class="mt-6 text-center">
+            <a href="/ui" class="text-gray-600 hover:text-gray-800 text-sm">
+                <i class="fas fa-arrow-left mr-1"></i>Back to Dashboard
+            </a>
+        </div>
+    </div>
+
+    <script>
+        let dAppClient = null;
+        let activeAccount = null;
+        let challengeData = null;
+
+        // Initialize Beacon SDK
+        async function initBeacon() {
+            try {
+                console.log("Initializing Beacon SDK...");
+                console.log("Beacon object:", beacon);
+                
+                // Try different network configuration formats
+                let clientConfig = {
+                    name: "Mango Data Service"
+                };
+                
+                if (beacon.NetworkType) {
+                    // Use NetworkType enum if available
+                    clientConfig.network = {
+                        type: beacon.NetworkType.MAINNET
+                    };
+                    console.log("Using NetworkType enum:", clientConfig);
+                } else {
+                    // Try network with string first
+                    try {
+                        clientConfig.network = {
+                            type: "mainnet"
+                        };
+                        console.log("Using network with string type");
+                    } catch (e) {
+                        // Fallback to preferredNetwork if network doesn't work
+                        clientConfig.preferredNetwork = "mainnet";
+                        console.log("Using preferredNetwork fallback");
+                    }
+                }
+                
+                dAppClient = new beacon.DAppClient(clientConfig);
+                
+                console.log("DAppClient created successfully");
+                
+                // Check if already connected
+                const activeAccount = await dAppClient.getActiveAccount();
+                console.log("Active account check:", activeAccount);
+                if (activeAccount) {
+                    setActiveAccount(activeAccount);
+                }
+            } catch (error) {
+                console.error("Failed to initialize Beacon:", error);
+                console.error("Initialization error details:", {
+                    name: error.name,
+                    message: error.message,
+                    stack: error.stack
+                });
+                showError("Failed to initialize wallet. Please make sure you have a Tezos wallet extension installed.");
+            }
+        }
+
+        // Connect wallet
+        async function connectWallet() {
+            try {
+                if (!dAppClient) {
+                    await initBeacon();
+                }
+
+                showStatus("Connecting to wallet...", "info");
+                document.getElementById("connectWalletBtn").disabled = true;
+
+                console.log("Requesting permissions...");
+                const permissions = await dAppClient.requestPermissions();
+                console.log("Permissions response:", permissions);
+
+                // After requesting permissions, get the active account
+                // This is the recommended way to get account info from Beacon SDK
+                const account = await dAppClient.getActiveAccount();
+                console.log("Active account:", account);
+
+                if (account && account.address) {
+                    setActiveAccount(account);
+                    showStatus("Wallet connected successfully!", "success");
+                } else {
+                    console.error("Invalid permissions response:", permissions);
+                    console.error("Active account:", account);
+                    showError("Failed to connect wallet. Please try again.");
+                    document.getElementById("connectWalletBtn").disabled = false;
+                }
+            } catch (error) {
+                console.error("Wallet connection error:", error);
+                console.error("Error details:", {
+                    name: error.name,
+                    message: error.message,
+                    stack: error.stack
+                });
+                
+                // Check if user cancelled
+                if (error.name === "BeaconError" || error.message?.includes("cancelled") || error.message?.includes("rejected")) {
+                    showError("Wallet connection was cancelled. Please try again.");
+                } else {
+                    showError("Failed to connect wallet: " + (error.message || error.toString() || "Unknown error"));
+                }
+                document.getElementById("connectWalletBtn").disabled = false;
+            }
+        }
+
+        function setActiveAccount(account) {
+            activeAccount = account;
+            document.getElementById("walletInfo").classList.remove("hidden");
+            document.getElementById("walletAddress").textContent = 
+                account.address.substring(0, 10) + "..." + account.address.substring(account.address.length - 8);
+            document.getElementById("signInBtn").classList.remove("hidden");
+            document.getElementById("connectWalletBtn").classList.add("hidden");
+        }
+
+        // Sign in with Tezos wallet
+        async function signIn() {
+            try {
+                if (!activeAccount) {
+                    showError("Please connect your wallet first.");
+                    return;
+                }
+
+                showStatus("Requesting challenge...", "info");
+                document.getElementById("signInBtn").disabled = true;
+
+                // Get challenge from server
+                const challengeResponse = await fetch("/auth/tezos/challenge");
+                if (!challengeResponse.ok) {
+                    throw new Error("Failed to get challenge");
+                }
+                
+                challengeData = await challengeResponse.json();
+                showStatus("Please sign the message in your wallet...", "info");
+
+                // Request signature from wallet
+                const signature = await dAppClient.requestSignPayload({
+                    signingType: beacon.SigningType.MICHELINE,
+                    payload: challengeData.packed_bytes_hex,
+                    sourceAddress: activeAccount.address
+                });
+
+                if (!signature) {
+                    throw new Error("Signature was cancelled");
+                }
+
+                showStatus("Verifying signature...", "info");
+
+                // Get public key (we'll need to derive it or request it)
+                // For now, we'll use the account's public key if available
+                // Note: Beacon SDK might not expose public key directly, so we may need to request it
+                const publicKey = activeAccount.publicKey || await getPublicKey(activeAccount.address);
+
+                // Send login request
+                const loginResponse = await fetch("/auth/tezos/login", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        pkh: activeAccount.address,
+                        public_key: publicKey,
+                        signature: signature.signature,
+                        challenge: challengeData.challenge
+                    })
+                });
+
+                const loginData = await loginResponse.json();
+                
+                if (loginResponse.ok) {
+                    showStatus("Login successful! Redirecting...", "success");
+                    setTimeout(() => {
+                        window.location.href = "/ui";
+                    }, 1500);
+                } else {
+                    throw new Error(loginData.error || "Login failed");
+                }
+            } catch (error) {
+                console.error("Sign in error:", error);
+                showError("Sign in failed: " + (error.message || "Unknown error"));
+                document.getElementById("signInBtn").disabled = false;
+            }
+        }
+
+        // Helper to get public key (simplified - in production you might need a different approach)
+        async function getPublicKey(address) {
+            // For now, return empty - the backend will need to handle this
+            // In a real implementation, you might need to request the public key from the wallet
+            // or derive it from the signature
+            return "";
+        }
+
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById("loginStatus");
+            const bgColor = type === "success" ? "bg-green-50 border-green-200 text-green-700" : 
+                           type === "error" ? "bg-red-50 border-red-200 text-red-700" :
+                           "bg-blue-50 border-blue-200 text-blue-700";
+            
+            statusDiv.innerHTML = `
+                <div class="p-4 border rounded-lg ${bgColor}">
+                    <div class="flex items-center">
+                        ${type === "info" ? '<div class="loading mr-2"></div>' : ''}
+                        <span class="text-sm">${message}</span>
+                    </div>
+                </div>
+            `;
+            statusDiv.classList.remove("hidden");
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById("errorMessage");
+            document.getElementById("errorText").textContent = message;
+            errorDiv.classList.remove("hidden");
+            document.getElementById("loginStatus").classList.add("hidden");
+        }
+
+        function hideError() {
+            document.getElementById("errorMessage").classList.add("hidden");
+        }
+
+        // Initialize on page load - wait for Beacon SDK to be available
+        window.addEventListener("load", () => {
+            // Wait a bit for the SDK to fully load
+            setTimeout(() => {
+                if (typeof beacon === 'undefined') {
+                    console.error("Beacon SDK not loaded!");
+                    showError("Failed to load wallet SDK. Please refresh the page.");
+                    return;
+                }
+                initBeacon();
+            }, 100);
+        });
+    </script>
+</body>
+</html>
+

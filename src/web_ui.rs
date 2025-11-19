@@ -25,6 +25,11 @@ pub struct AnalyticsTemplate {
 }
 
 #[cfg(feature = "web-ui")]
+#[derive(Template)]
+#[template(path = "login.html")]
+pub struct LoginTemplate;
+
+#[cfg(feature = "web-ui")]
 #[derive(Debug, Deserialize)]
 pub struct AnalyticsQuery {
     pub symbol: Option<String>,
@@ -45,6 +50,11 @@ pub async fn analytics(Query(params): Query<AnalyticsQuery>) -> impl IntoRespons
     AnalyticsTemplate {
         symbol: params.symbol,
     }
+}
+
+#[cfg(feature = "web-ui")]
+pub async fn login() -> impl IntoResponse {
+    LoginTemplate
 }
 
 // Placeholder functions for when web-ui feature is disabled

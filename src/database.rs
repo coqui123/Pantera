@@ -1,10 +1,10 @@
 use crate::models::{PortfolioHolding, *};
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Row, Sqlite};
 use std::str::FromStr;
-use tracing::info;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 pub type DbPool = Pool<Sqlite>;
@@ -18,31 +18,60 @@ impl Database {
         // Handle SQLite-specific setup
         let processed_url = if database_url.starts_with("sqlite:") {
             // Extract the file path from the URL
-            let file_path = database_url.strip_prefix("sqlite:").unwrap_or(database_url);
+            // Handle both sqlite: and sqlite:/// formats
+            let file_path = if database_url.starts_with("sqlite:///") {
+                database_url.strip_prefix("sqlite:///").unwrap_or(database_url)
+            } else {
+                database_url.strip_prefix("sqlite:").unwrap_or(database_url)
+            };
 
             // If it's not an in-memory database, ensure the directory exists
             if file_path != ":memory:" && !file_path.is_empty() {
                 let db_path = std::path::Path::new(file_path);
                 
-                // Ensure the directory exists
+                // Ensure the directory exists and is writable
                 if let Some(parent) = db_path.parent() {
                     if !parent.exists() {
                         info!("Creating directory: {:?}", parent);
                         std::fs::create_dir_all(parent)?;
                         info!("Directory created successfully");
                     }
+                    
+                    // Verify directory is writable
+                    let metadata = std::fs::metadata(parent)?;
+                    let perms = metadata.permissions();
+                    info!("Directory permissions: {:?}, writable: {}", perms, parent.is_dir() && parent.exists());
+                    
+                    // Test write capability
+                    let test_file = parent.join(".write_test");
+                    match std::fs::File::create(&test_file) {
+                        Ok(_) => {
+                            let _ = std::fs::remove_file(&test_file);
+                            info!("Directory is writable: {:?}", parent);
+                        }
+                        Err(e) => {
+                            return Err(anyhow::anyhow!(
+                                "Cannot write to database directory {:?}: {} (error code: {:?})",
+                                parent,
+                                e,
+                                e.raw_os_error()
+                            ));
+                        }
+                    }
                 }
-
-                // Check if database file exists, but don't create/truncate it
-                // SQLite will create it automatically if needed, and we don't want to overwrite existing data
+                
                 if db_path.exists() {
                     info!("Using existing database file: {}", file_path);
+                    database_url.to_string()
                 } else {
-                    info!("Database file will be created at: {}", file_path);
+                    info!("Database file does not exist, SQLite will create it at: {}", file_path);
+                    // Add ?mode=rwc to connection string to ensure SQLite can create the file
+                    // rwc = read, write, create - this is especially important for Fly.io volumes
+                    format!("sqlite:///{}?mode=rwc", file_path)
                 }
+            } else {
+                database_url.to_string()
             }
-
-            database_url.to_string()
         } else {
             database_url.to_string()
         };

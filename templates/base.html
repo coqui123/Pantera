@@ -49,6 +49,8 @@
                     <a href="/api/stats" target="_blank" class="nav-item text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium transition duration-200">
                         <i class="fas fa-database mr-1"></i>Stats
                     </a>
+                    <div id="authSection" class="border-l border-white border-opacity-30 h-6 mx-2"></div>
+                    <div id="authButtons"></div>
                 </div>
             </div>
         </div>
@@ -170,6 +172,48 @@
             });
         }
 
+        // Check auth status and show login/logout buttons
+        async function checkAuthStatus() {
+            try {
+                // Use the public auth status endpoint
+                const response = await fetch('/auth/status');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.authenticated || data.dev_mode) {
+                        // User is authenticated
+                        const authButtons = document.getElementById('authButtons');
+                        if (authButtons) {
+                            authButtons.innerHTML = `
+                                <a href="/auth/logout" class="nav-item text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium transition duration-200">
+                                    <i class="fas fa-sign-out-alt mr-1"></i>Logout
+                                </a>
+                            `;
+                        }
+                    } else {
+                        showLoginButton();
+                    }
+                } else {
+                    showLoginButton();
+                }
+            } catch (error) {
+                // If auth check fails, check if we're on login page
+                if (window.location.pathname !== '/login') {
+                    showLoginButton();
+                }
+            }
+        }
+
+        function showLoginButton() {
+            const authButtons = document.getElementById('authButtons');
+            if (authButtons) {
+                authButtons.innerHTML = `
+                    <a href="/login" class="nav-item text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium transition duration-200">
+                        <i class="fas fa-sign-in-alt mr-1"></i>Login
+                    </a>
+                `;
+            }
+        }
+
         // Highlight active nav item
         document.addEventListener('DOMContentLoaded', function() {
             const currentPath = window.location.pathname;
@@ -180,6 +224,9 @@
                     link.classList.add('bg-white', 'bg-opacity-20', 'rounded-md');
                 }
             });
+
+            // Check auth status
+            checkAuthStatus();
         });
     </script>
 </body>

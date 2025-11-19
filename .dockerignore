@@ -1,0 +1,49 @@
+# Rust build artifacts
+target/
+**/*.rs.bk
+*.pdb
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Examples
+examples/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Fly.io
+.fly/
+fly.toml
+
+# Database files (will be created in container)
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# Logs
+*.log
+
+# Test files
+**/__pycache__/
+*.pyc
+

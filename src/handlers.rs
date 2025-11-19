@@ -21,8 +21,29 @@ use crate::models::{
 };
 use crate::validation::{validate_date_range, validate_limit, validate_search_query};
 use crate::yahoo_service::{YahooFinanceService, YahooServiceError};
+use crate::config::Config;
 
-type AppState = Arc<YahooFinanceService>;
+// AppState wrapper that includes both the service and config for auth
+#[derive(Clone)]
+pub struct AppState {
+    pub service: Arc<YahooFinanceService>,
+    pub config: Config,
+}
+
+impl AppState {
+    pub fn new(service: Arc<YahooFinanceService>, config: Config) -> Self {
+        Self { service, config }
+    }
+}
+
+// For backward compatibility, allow dereferencing to service
+impl std::ops::Deref for AppState {
+    type Target = YahooFinanceService;
+    
+    fn deref(&self) -> &Self::Target {
+        &self.service
+    }
+}
 
 #[derive(Debug, Deserialize)]
 pub struct HistoricalParams {
@@ -89,17 +110,17 @@ pub async fn health_check() -> Json<ApiResponse<serde_json::Value>> {
 
 // Get all symbols with rate limiting
 pub async fn get_symbols(
-    State(service): State<AppState>,
+    State(app_state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse<Vec<Symbol>>>, StatusCode> {
     let client_id = get_client_id(&headers);
     
     // Check rate limit
-    if let Err(YahooServiceError::RateLimitExceeded) = service.check_api_rate_limit(&client_id).await {
+    if let Err(YahooServiceError::RateLimitExceeded) = app_state.service.check_api_rate_limit(&client_id).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
 
-    match service.db.get_all_symbols().await {
+    match app_state.service.db.get_all_symbols().await {
         Ok(symbols) => Ok(Json(ApiResponse::success(symbols))),
         Err(e) => {
             error!("Failed to get symbols: {}", e);
@@ -474,7 +495,7 @@ pub async fn bulk_fetch_historical(
     let interval = params.interval.unwrap_or_else(|| "1d".to_string());
     let max_concurrent = params.max_concurrent.unwrap_or(5).clamp(1, 10) as usize;
 
-    match (&service as &Arc<YahooFinanceService>)
+    match service.service
         .bulk_fetch_historical(symbol_refs, &interval, max_concurrent)
         .await
     {
@@ -647,14 +668,14 @@ pub async fn get_database_stats(
 // Comprehensive quote with rate limiting
 pub async fn get_comprehensive_quote(
     Path(symbol): Path<String>,
-    State(yahoo_service): State<Arc<YahooFinanceService>>,
+    State(app_state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
     let client_id = get_client_id(&headers);
     
     // Check rate limit
     if let Err(YahooServiceError::RateLimitExceeded) =
-        yahoo_service.check_api_rate_limit(&client_id).await
+        app_state.service.check_api_rate_limit(&client_id).await
     {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
@@ -668,7 +689,7 @@ pub async fn get_comprehensive_quote(
         ))));
     }
     
-    match yahoo_service.get_comprehensive_quote(&symbol).await {
+    match app_state.service.get_comprehensive_quote(&symbol).await {
         Ok(data) => Ok(Json(ApiResponse::success(data))),
         Err(e) => {
             error!("Failed to get comprehensive quote for {}: {}", symbol, e);
@@ -680,14 +701,14 @@ pub async fn get_comprehensive_quote(
 // Extended quote data with rate limiting
 pub async fn get_extended_quote_data(
     Path(symbol): Path<String>,
-    State(yahoo_service): State<Arc<YahooFinanceService>>,
+    State(app_state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
     let client_id = get_client_id(&headers);
     
     // Check rate limit
     if let Err(YahooServiceError::RateLimitExceeded) =
-        yahoo_service.check_api_rate_limit(&client_id).await
+        app_state.service.check_api_rate_limit(&client_id).await
     {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
@@ -701,7 +722,7 @@ pub async fn get_extended_quote_data(
         ))));
     }
     
-    match yahoo_service.get_extended_quote_data(&symbol).await {
+    match app_state.service.get_extended_quote_data(&symbol).await {
         Ok(data) => Ok(Json(ApiResponse::success(data))),
         Err(e) => {
             error!("Failed to get extended quote data for {}: {}", symbol, e);

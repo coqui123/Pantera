@@ -24,6 +24,10 @@ mod models;
 mod validation;
 mod yahoo_service;
 mod web_ui;
+mod auth;
+mod auth_handler;
+mod auth_routes;
+mod auth_middleware;
 
 use config::Config;
 use database::Database;
@@ -35,7 +39,7 @@ use handlers::{
     get_extended_quote_data, handler_404, cleanup_cache,
     get_technical_indicators, compare_symbols,
     get_portfolio, add_portfolio_holding, update_portfolio_holding,
-    delete_portfolio_holding, update_portfolio_prices,
+    delete_portfolio_holding, update_portfolio_prices, AppState,
 };
 use yahoo_service::YahooFinanceService;
 
@@ -70,7 +74,10 @@ async fn main() -> Result<()> {
     // Create Yahoo Finance service with optimizations
     let yahoo_service = Arc::new(YahooFinanceService::new(Arc::new(db), config.clone())?);
     info!("✅ Yahoo Finance service initialized with rate limiting and caching");
-
+    
+    // Create AppState with service and config
+    let app_state = AppState::new(yahoo_service.clone(), config.clone());
+    
     // Start background cache cleanup task
     let cleanup_service = yahoo_service.clone();
     let cleanup_interval = config.cache.cleanup_interval;
@@ -150,9 +157,12 @@ async fn main() -> Result<()> {
     };
 
     // Build the application with optimized routes
-    let app = Router::new()
+    let mut app = Router::<AppState>::new()
         // Health check
         .route("/health", get(health_check))
+        
+        // Auth routes (if Tezos auth is enabled)
+        .merge(auth_routes::create_auth_router())
         
         // Symbol management
         .route("/api/symbols", get(get_symbols))
@@ -195,16 +205,32 @@ async fn main() -> Result<()> {
         
     // Add web UI routes if feature is enabled
     #[cfg(feature = "web-ui")]
-    let app = app
-        .route("/ui", get(web_ui::dashboard))
-        .route("/ui/search", get(web_ui::search))
-        .route("/ui/analytics", get(web_ui::analytics))
-        .route("/", get(web_ui::dashboard)); // Root redirects to dashboard
+    {
+        use axum::middleware;
+        
+        // Create protected routes with auth middleware
+        let protected_routes = Router::new()
+            .route("/ui", get(web_ui::dashboard))
+            .route("/ui/search", get(web_ui::search))
+            .route("/ui/analytics", get(web_ui::analytics))
+            .route("/", get(web_ui::dashboard)) // Root redirects to dashboard
+            .route_layer(middleware::from_fn_with_state(
+                app_state.clone(),
+                auth_middleware::require_auth_middleware,
+            ));
+        
+        // Public login route and merge protected routes
+        app = app
+            .route("/login", get(web_ui::login))
+            .merge(protected_routes);
+    }
         
     // Add basic API info route when web-ui is disabled
     #[cfg(not(feature = "web-ui"))]
-    let app = app
-        .route("/", get(|| async { "Mango Data Service API - Use /health for status or /api/* for endpoints" }));
+    {
+        app = app
+            .route("/", get(|| async { "Mango Data Service API - Use /health for status or /api/* for endpoints" }));
+    }
         
     let app = app
         // Fallback for 404
@@ -218,7 +244,7 @@ async fn main() -> Result<()> {
         )
         
         // Add shared state
-        .with_state(yahoo_service);
+        .with_state(app_state);
 
     // Start the server
     let addr = format!("{}:{}", config.server.host, config.server.port);
@@ -226,6 +252,16 @@ async fn main() -> Result<()> {
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     info!("🚀 Mango Data Service is running on http://{}", addr);
+    
+    // Log web-ui feature status
+    #[cfg(feature = "web-ui")]
+    {
+        info!("✅ Web UI is ENABLED - Access at http://{}/ui", addr);
+    }
+    #[cfg(not(feature = "web-ui"))]
+    {
+        info!("⚠️  Web UI is DISABLED - Build with --features web-ui to enable");
+    }
     
     // Print available endpoints with optimization info
     print_api_info();

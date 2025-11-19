@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::time::Duration;
+use rand::RngCore;
 
 /// Application configuration loaded from environment variables
 #[derive(Debug, Clone)]
@@ -9,6 +10,7 @@ pub struct Config {
     pub rate_limiting: RateLimitConfig,
     pub cache: CacheConfig,
     pub cors: CorsConfig,
+    pub auth: AuthConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -48,16 +50,36 @@ pub struct CorsConfig {
     pub allow_all_origins: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct AuthConfig {
+    pub enable_tezos_auth: bool,
+    pub admin_tezos_addresses: Vec<String>,
+    pub dev_mode: bool,
+    pub cookie_hmac_key: [u8; 32],
+}
+
 impl Config {
     /// Load configuration from environment variables
     pub fn from_env() -> Result<Self> {
-        dotenvy::dotenv().ok();
+        // Try to load .env file, but it's okay if it doesn't exist
+        match dotenvy::dotenv() {
+            Ok(path) => {
+                tracing::info!("Loaded .env file from: {}", path.display());
+            }
+            Err(dotenvy::Error::Io(io_err)) if io_err.kind() == std::io::ErrorKind::NotFound => {
+                tracing::debug!("No .env file found, using environment variables and defaults");
+            }
+            Err(e) => {
+                tracing::warn!("Failed to load .env file: {}", e);
+            }
+        }
 
         let database = DatabaseConfig {
             url: std::env::var("DATABASE_URL").unwrap_or_else(|_| {
                 let current_dir = std::env::current_dir().unwrap_or_default();
                 let db_path = current_dir.join("data").join("data.db");
-                format!("sqlite:{}", db_path.display())
+                // Use sqlite:/// format for absolute paths (sqlx requirement)
+                format!("sqlite:///{}", db_path.display())
             }),
             max_connections: std::env::var("DATABASE_MAX_CONNECTIONS")
                 .ok()
@@ -156,12 +178,73 @@ impl Config {
             }
         };
 
+        // Tezos authentication configuration
+        let enable_tezos_auth = std::env::var("ENABLE_TEZOS_AUTH")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(false);
+        
+        let admin_tezos_addresses = std::env::var("ADMIN_TEZOS_ADDRESSES")
+            .ok()
+            .map(|s| {
+                s.split(',')
+                    .map(|addr| addr.trim().to_string())
+                    .filter(|addr| !addr.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default();
+        
+        let dev_mode = std::env::var("DEV_MODE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(false);
+        
+        // Log Tezos auth configuration for debugging
+        tracing::info!("Tezos Auth Configuration:");
+        tracing::info!("  ENABLE_TEZOS_AUTH: {}", enable_tezos_auth);
+        tracing::info!("  ADMIN_TEZOS_ADDRESSES: {:?}", admin_tezos_addresses);
+        tracing::info!("  DEV_MODE: {}", dev_mode);
+        tracing::debug!("  COOKIE_HMAC_KEY: {}", std::env::var("COOKIE_HMAC_KEY").is_ok());
+        
+        // Generate or load HMAC key for cookie signing
+        let cookie_hmac_key = if let Ok(key_str) = std::env::var("COOKIE_HMAC_KEY") {
+            // Load from environment variable (should be 64 hex chars = 32 bytes)
+            let key_bytes = hex::decode(key_str)
+                .unwrap_or_else(|_| {
+                    tracing::warn!("Invalid COOKIE_HMAC_KEY format, generating new key");
+                    generate_random_key().to_vec()
+                });
+            if key_bytes.len() != 32 {
+                tracing::warn!("COOKIE_HMAC_KEY must be 32 bytes (64 hex chars), generating new key");
+                generate_random_key()
+            } else {
+                let mut key = [0u8; 32];
+                key.copy_from_slice(&key_bytes);
+                key
+            }
+        } else {
+            // Generate a random key if not provided
+            // In production, this should be set via environment variable
+            if !dev_mode {
+                tracing::warn!("COOKIE_HMAC_KEY not set, generating random key. This will invalidate sessions on restart!");
+            }
+            generate_random_key()
+        };
+
+        let auth = AuthConfig {
+            enable_tezos_auth,
+            admin_tezos_addresses,
+            dev_mode,
+            cookie_hmac_key,
+        };
+
         Ok(Config {
             database,
             server,
             rate_limiting,
             cache,
             cors,
+            auth,
         })
     }
 
@@ -188,4 +271,10 @@ pub const MAX_COMPARE_SYMBOLS: usize = 10;
 pub const DEFAULT_HISTORICAL_LIMIT: i32 = 100;
 pub const MAX_HISTORICAL_LIMIT: i32 = 1000;
 pub const MIN_TECHNICAL_INDICATOR_PERIODS: usize = 20;
+
+fn generate_random_key() -> [u8; 32] {
+    let mut key = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut key);
+    key
+}
 
