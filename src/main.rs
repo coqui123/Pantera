@@ -208,7 +208,7 @@ async fn main() -> Result<()> {
     {
         use axum::middleware;
         
-        // Create protected routes with auth middleware
+        // Create protected routes with auth middleware and cache headers
         let protected_routes = Router::new()
             .route("/ui", get(web_ui::dashboard))
             .route("/ui/search", get(web_ui::search))
@@ -217,12 +217,15 @@ async fn main() -> Result<()> {
             .route_layer(middleware::from_fn_with_state(
                 app_state.clone(),
                 auth_middleware::require_auth_middleware,
-            ));
+            ))
+            .layer(middleware::from_fn(web_ui::cache_headers_middleware));
         
-        // Public login route and merge protected routes
-        app = app
+        // Public login route with cache headers
+        let login_route = Router::new()
             .route("/login", get(web_ui::login))
-            .merge(protected_routes);
+            .layer(middleware::from_fn(web_ui::cache_headers_middleware));
+        
+        app = app.merge(protected_routes).merge(login_route);
     }
         
     // Add basic API info route when web-ui is disabled

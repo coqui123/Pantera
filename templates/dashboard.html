@@ -5,11 +5,11 @@
 {% block content %}
 <div class="animate-fade-in">
     <!-- Hero Section -->
-    <div class="gradient-bg rounded-lg shadow-xl p-8 mb-8 text-white">
+    <div class="gradient-bg rounded-lg shadow-xl p-4 sm:p-6 lg:p-8 mb-6 sm:mb-8 text-white">
         <div class="max-w-4xl mx-auto text-center">
-            <h1 class="text-4xl font-bold mb-4">🥭 Mango Data Service</h1>
-            <p class="text-xl mb-6">Admin Dashboard - High-Performance Yahoo Finance API with Web Management</p>
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-8">
+            <h1 class="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 sm:mb-4">🥭 Mango Data Service</h1>
+            <p class="text-base sm:text-lg lg:text-xl mb-4 sm:mb-6">Admin Dashboard - High-Performance Yahoo Finance API with Web Management</p>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mt-4 sm:mt-8">
                 <div class="bg-white bg-opacity-20 rounded-lg p-4">
                     <div class="text-2xl font-bold">50-80%</div>
                     <div class="text-sm">Memory Reduction</div>
@@ -31,17 +31,17 @@
     </div>
 
     <!-- Portfolio Section -->
-    <div class="bg-white rounded-lg shadow-md p-6 mb-8">
-        <div class="flex items-center justify-between mb-4">
+    <div class="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-6 sm:mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
             <div>
-                <h2 class="text-2xl font-semibold text-gray-800">
+                <h2 class="text-xl sm:text-2xl font-semibold text-gray-800">
                     <i class="fas fa-wallet text-yellow-500 mr-2"></i>My Portfolio
                 </h2>
                 <p class="text-xs text-gray-500 mt-1">
                     <i class="fas fa-sync-alt mr-1"></i>Auto-updates every 30 seconds
                 </p>
             </div>
-            <button onclick="refreshPortfolio()" id="refreshPortfolioBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-md text-sm transition duration-200">
+            <button onclick="refreshPortfolio()" id="refreshPortfolioBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-md text-sm transition duration-200 w-full sm:w-auto">
                 <i class="fas fa-sync-alt mr-1"></i>Refresh
             </button>
         </div>
@@ -54,29 +54,29 @@
     </div>
 
     <!-- Quick Actions -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 mb-6 sm:mb-8">
         <!-- Symbol Management -->
         <div class="bg-white rounded-lg shadow-md p-6 card-hover">
             <h2 class="text-2xl font-semibold mb-4 text-gray-800">
                 <i class="fas fa-cogs text-blue-500 mr-2"></i>Symbol Management
             </h2>
             <p class="text-gray-600 mb-4">Add new symbols to database or search existing ones</p>
-            <form id="quickAddForm" class="space-y-4">
+                <form id="quickAddForm" class="space-y-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Add Symbol to Database</label>
-                    <div class="flex">
+                    <div class="flex flex-col sm:flex-row gap-2">
                         <input type="text" id="quickSymbolInput" placeholder="e.g., META, NVDA, AMZN" 
-                               class="flex-1 border border-gray-300 rounded-l-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                               class="flex-1 border border-gray-300 rounded-md sm:rounded-l-md sm:rounded-r-none px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <button type="submit" id="quickAddBtn" 
-                                class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-r-md transition duration-200">
+                                class="bg-blue-500 hover:bg-blue-600 text-white px-4 sm:px-6 py-2 rounded-md sm:rounded-r-md sm:rounded-l-none transition duration-200 w-full sm:w-auto">
                             <i class="fas fa-plus mr-1"></i>Add
                         </button>
                     </div>
                 </div>
             </form>
             <div id="quickAddResult" class="mt-4"></div>
-            <div class="mt-4 flex space-x-2">
-                <a href="/ui/search" class="inline-flex items-center px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-medium rounded-lg transition duration-200">
+            <div class="mt-4">
+                <a href="/ui/search" class="inline-flex items-center justify-center px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-medium rounded-lg transition duration-200 w-full sm:w-auto">
                     <i class="fas fa-search mr-2"></i>Full Management
                 </a>
             </div>
@@ -103,12 +103,12 @@
     </div>
 
     <!-- Database Overview -->
-    <div class="bg-white rounded-lg shadow-md p-6 mb-8">
-        <div class="flex items-center justify-between mb-4">
-            <h2 class="text-2xl font-semibold text-gray-800">
+    <div class="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-6 sm:mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
+            <h2 class="text-xl sm:text-2xl font-semibold text-gray-800">
                 <i class="fas fa-database text-purple-500 mr-2"></i>Database Overview
             </h2>
-            <button onclick="refreshStats()" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md text-sm transition duration-200">
+            <button onclick="refreshStats()" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md text-sm transition duration-200 w-full sm:w-auto">
                 <i class="fas fa-refresh mr-1"></i>Refresh
             </button>
         </div>
@@ -121,7 +121,7 @@
     </div>
 
     <!-- Features Showcase -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
         <div class="bg-white rounded-lg shadow-md p-6 card-hover">
             <div class="text-center">
                 <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -154,11 +154,11 @@
     </div>
 
     <!-- API Endpoints -->
-    <div class="bg-white rounded-lg shadow-md p-6">
-        <h2 class="text-2xl font-semibold mb-6 text-gray-800">
+    <div class="bg-white rounded-lg shadow-md p-4 sm:p-6">
+        <h2 class="text-xl sm:text-2xl font-semibold mb-4 sm:mb-6 text-gray-800">
             <i class="fas fa-code text-indigo-500 mr-2"></i>Available API Endpoints
         </h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             <div>
                 <h3 class="text-lg font-semibold mb-3 text-gray-700">Core Endpoints</h3>
                 <div class="space-y-2">
@@ -194,11 +194,11 @@
                 </div>
             </div>
         </div>
-        <div class="mt-6 text-center">
-            <a href="/ui/search" class="inline-flex items-center px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-medium rounded-lg transition duration-200 mr-4">
+        <div class="mt-4 sm:mt-6 text-center space-y-2 sm:space-y-0 sm:space-x-4">
+            <a href="/ui/search" class="inline-flex items-center justify-center px-4 sm:px-6 py-2 sm:py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-medium rounded-lg transition duration-200 w-full sm:w-auto">
                 <i class="fas fa-cogs mr-2"></i>Manage Symbols
             </a>
-            <a href="/ui/analytics" class="inline-flex items-center px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-lg transition duration-200">
+            <a href="/ui/analytics" class="inline-flex items-center justify-center px-4 sm:px-6 py-2 sm:py-3 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-lg transition duration-200 w-full sm:w-auto">
                 <i class="fas fa-chart-bar mr-2"></i>View Analytics
             </a>
         </div>
@@ -510,16 +510,16 @@
             
             return `
                 <tr class="border-b border-gray-200 hover:bg-gray-50">
-                    <td class="py-3 px-4">
-                        <div class="font-semibold">${h.symbol}</div>
-                        <div class="text-sm text-gray-500">${holding.name || h.asset_type}</div>
+                    <td class="py-3 px-2 sm:px-4">
+                        <div class="font-semibold text-sm">${h.symbol}</div>
+                        <div class="text-xs text-gray-500 hidden sm:block">${holding.name || h.asset_type}</div>
                     </td>
-                    <td class="py-3 px-4 text-sm">${parseFloat(h.quantity).toFixed(4)}</td>
-                    <td class="py-3 px-4 text-sm">$${parseFloat(h.purchase_price).toFixed(2)}</td>
-                    <td class="py-3 px-4 text-sm">$${currentPrice.toFixed(2)}</td>
-                    <td class="py-3 px-4 text-sm">$${currentValue.toFixed(2)}</td>
-                    <td class="py-3 px-4">
-                        <div class="${hGainLossClass}">
+                    <td class="py-3 px-2 sm:px-4 text-xs sm:text-sm">${parseFloat(h.quantity).toFixed(4)}</td>
+                    <td class="py-3 px-2 sm:px-4 text-xs sm:text-sm hidden sm:table-cell">$${parseFloat(h.purchase_price).toFixed(2)}</td>
+                    <td class="py-3 px-2 sm:px-4 text-xs sm:text-sm">$${currentPrice.toFixed(2)}</td>
+                    <td class="py-3 px-2 sm:px-4 text-xs sm:text-sm hidden md:table-cell">$${currentValue.toFixed(2)}</td>
+                    <td class="py-3 px-2 sm:px-4">
+                        <div class="${hGainLossClass} text-xs sm:text-sm">
                             <i class="fas ${hGainLossIcon} mr-1"></i>
                             $${Math.abs(gainLoss).toFixed(2)}
                         </div>
@@ -527,12 +527,12 @@
                             ${gainLossPercent >= 0 ? '+' : ''}${gainLossPercent.toFixed(2)}%
                         </div>
                     </td>
-                    <td class="py-3 px-4">
-                        <div class="flex space-x-2">
-                            <button onclick="editHolding('${h.id}', '${h.symbol}', ${parseFloat(h.quantity)}, ${parseFloat(h.purchase_price)})" class="text-blue-600 hover:text-blue-800 text-sm" title="Edit holding">
+                    <td class="py-3 px-2 sm:px-4">
+                        <div class="flex space-x-1 sm:space-x-2">
+                            <button onclick="editHolding('${h.id}', '${h.symbol}', ${parseFloat(h.quantity)}, ${parseFloat(h.purchase_price)})" class="text-blue-600 hover:text-blue-800 text-sm p-1 sm:p-0" title="Edit holding">
                                 <i class="fas fa-edit"></i>
                             </button>
-                            <button onclick="deleteHolding('${h.id}')" class="text-red-600 hover:text-red-800 text-sm" title="Delete holding">
+                            <button onclick="deleteHolding('${h.id}')" class="text-red-600 hover:text-red-800 text-sm p-1 sm:p-0" title="Delete holding">
                                 <i class="fas fa-trash"></i>
                             </button>
                         </div>
@@ -543,8 +543,8 @@
 
         const portfolioContent = document.getElementById('portfolioContent');
         portfolioContent.innerHTML = `
-            <div class="mb-6">
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                <div class="mb-6">
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mb-4">
                     <div class="bg-gray-50 rounded-lg p-4">
                         <div class="text-sm text-gray-600 mb-1">Total Cost</div>
                         <div class="text-xl font-bold">$${totalCost.toFixed(2)}</div>
@@ -578,17 +578,17 @@
                         <i class="fas fa-plus mr-1"></i>Add Holding
                     </button>
                 </div>
-                <div id="holdingsTableContainer" class="overflow-x-auto">
+                <div id="holdingsTableContainer" class="table-responsive overflow-x-auto -mx-4 sm:mx-0">
                     <table class="min-w-full">
                         <thead class="bg-gray-100">
                             <tr>
-                                <th class="py-2 px-4 text-left text-sm font-semibold text-gray-700">Symbol</th>
-                                <th class="py-2 px-4 text-left text-sm font-semibold text-gray-700">Quantity</th>
-                                <th class="py-2 px-4 text-left text-sm font-semibold text-gray-700">Purchase Price</th>
-                                <th class="py-2 px-4 text-left text-sm font-semibold text-gray-700">Current Price</th>
-                                <th class="py-2 px-4 text-left text-sm font-semibold text-gray-700">Value</th>
-                                <th class="py-2 px-4 text-left text-sm font-semibold text-gray-700">Gain/Loss</th>
-                                <th class="py-2 px-4 text-left text-sm font-semibold text-gray-700">Actions</th>
+                                <th class="py-2 px-2 sm:px-4 text-left text-xs sm:text-sm font-semibold text-gray-700">Symbol</th>
+                                <th class="py-2 px-2 sm:px-4 text-left text-xs sm:text-sm font-semibold text-gray-700">Qty</th>
+                                <th class="py-2 px-2 sm:px-4 text-left text-xs sm:text-sm font-semibold text-gray-700 hidden sm:table-cell">Purchase</th>
+                                <th class="py-2 px-2 sm:px-4 text-left text-xs sm:text-sm font-semibold text-gray-700">Current</th>
+                                <th class="py-2 px-2 sm:px-4 text-left text-xs sm:text-sm font-semibold text-gray-700 hidden md:table-cell">Value</th>
+                                <th class="py-2 px-2 sm:px-4 text-left text-xs sm:text-sm font-semibold text-gray-700">G/L</th>
+                                <th class="py-2 px-2 sm:px-4 text-left text-xs sm:text-sm font-semibold text-gray-700">Actions</th>
                             </tr>
                         </thead>
                         <tbody>

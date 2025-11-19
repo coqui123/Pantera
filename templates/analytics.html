@@ -5,12 +5,12 @@
 {% block content %}
 <div class="animate-fade-in">
     <!-- Enhanced Analytics Header -->
-    <div class="bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg shadow-xl p-6 mb-6 text-white">
-        <h1 class="text-4xl font-bold mb-2">
-            <i class="fas fa-chart-line mr-3"></i>Advanced Financial Analytics Dashboard
+    <div class="bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg shadow-xl p-4 sm:p-6 mb-4 sm:mb-6 text-white">
+        <h1 class="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2">
+            <i class="fas fa-chart-line mr-2 sm:mr-3"></i>Advanced Financial Analytics Dashboard
         </h1>
-        <p class="text-xl opacity-90">Professional-grade analysis with technical indicators and market intelligence</p>
-        <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+        <p class="text-base sm:text-lg lg:text-xl opacity-90">Professional-grade analysis with technical indicators and market intelligence</p>
+        <div class="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
             <div class="bg-white bg-opacity-20 rounded-lg p-3 text-center">
                 <div class="text-2xl font-bold">Live Data</div>
                 <div class="text-sm">Real-time Updates</div>
@@ -31,62 +31,64 @@
     </div>
 
     <!-- Enhanced Symbol Selection with Watchlist -->
-    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-        <div class="flex items-center justify-between mb-4">
-            <h2 class="text-xl font-semibold text-gray-800">
+    <div class="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-4 sm:mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
+            <h2 class="text-lg sm:text-xl font-semibold text-gray-800">
                 <i class="fas fa-search text-blue-500 mr-2"></i>Symbol Analysis & Watchlist
-        </h2>
-            <div class="flex space-x-2">
-                <button id="addToWatchlistBtn" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md text-sm transition duration-200" disabled>
+            </h2>
+            <div class="flex flex-col sm:flex-row gap-2">
+                <button id="addToWatchlistBtn" class="bg-green-500 hover:bg-green-600 text-white px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm transition duration-200 w-full sm:w-auto" disabled>
                     <i class="fas fa-plus mr-1"></i>Add to Watchlist
                 </button>
-                <button id="compareBtn" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-md text-sm transition duration-200" disabled>
+                <button id="compareBtn" class="bg-orange-500 hover:bg-orange-600 text-white px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm transition duration-200 w-full sm:w-auto" disabled>
                     <i class="fas fa-balance-scale mr-1"></i>Compare
                 </button>
             </div>
         </div>
         
-        <form id="analyticsForm" class="grid grid-cols-1 md:grid-cols-6 gap-4 mb-4">
-            <div class="md:col-span-2">
+        <form id="analyticsForm" class="space-y-4 mb-4">
+            <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Stock Symbol</label>
                 <input type="text" id="symbolInput" placeholder="Enter symbol (e.g., META, AAPL)" 
                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500">
             </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Timeframe</label>
-                <select id="intervalSelect" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500">
-                    <option value="1d">Daily</option>
-                    <option value="1wk">Weekly</option>
-                    <option value="1mo">Monthly</option>
-                    <option value="1h">Hourly</option>
-                    <option value="30m">30 Minutes</option>
-                    <option value="15m">15 Minutes</option>
-                    <option value="5m">5 Minutes</option>
-                </select>
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Period</label>
-                <select id="periodSelect" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500">
-                    <option value="30">30 periods</option>
-                    <option value="60">60 periods</option>
-                    <option value="100">100 periods</option>
-                    <option value="200">200 periods</option>
-                    <option value="365">1 Year</option>
-                </select>
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Chart Type</label>
-                <select id="chartTypeSelect" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500">
-                    <option value="candlestick">Candlestick</option>
-                    <option value="line">Line Chart</option>
-                    <option value="ohlc">OHLC Bars</option>
-                </select>
-            </div>
-            <div class="flex items-end">
-                <button type="submit" id="analyzeBtn" 
-                        class="w-full bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md transition duration-200">
-                    <i class="fas fa-chart-line mr-2"></i>Analyze
-                </button>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Timeframe</label>
+                    <select id="intervalSelect" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <option value="1d">Daily</option>
+                        <option value="1wk">Weekly</option>
+                        <option value="1mo">Monthly</option>
+                        <option value="1h">Hourly</option>
+                        <option value="30m">30 Minutes</option>
+                        <option value="15m">15 Minutes</option>
+                        <option value="5m">5 Minutes</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Period</label>
+                    <select id="periodSelect" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <option value="30">30 periods</option>
+                        <option value="60">60 periods</option>
+                        <option value="100">100 periods</option>
+                        <option value="200">200 periods</option>
+                        <option value="365">1 Year</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Chart Type</label>
+                    <select id="chartTypeSelect" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <option value="candlestick">Candlestick</option>
+                        <option value="line">Line Chart</option>
+                        <option value="ohlc">OHLC Bars</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button type="submit" id="analyzeBtn" 
+                            class="w-full bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md transition duration-200">
+                        <i class="fas fa-chart-line mr-2"></i>Analyze
+                    </button>
+                </div>
             </div>
         </form>
 
@@ -100,11 +102,11 @@
     </div>
 
     <!-- Quick Access Enhanced -->
-    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-        <h2 class="text-xl font-semibold mb-4 text-gray-800">
+    <div class="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-4 sm:mb-6">
+        <h2 class="text-lg sm:text-xl font-semibold mb-4 text-gray-800">
             <i class="fas fa-bolt text-yellow-500 mr-2"></i>Quick Analysis & Popular Stocks
         </h2>
-        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+        <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3">
             <button onclick="quickAnalyze('AAPL')" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-2 rounded-md text-sm font-medium transition duration-200">
                 AAPL
             </button>
@@ -157,11 +159,11 @@
         </div>
 
         <!-- Technical Analysis Controls -->
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <h3 class="text-xl font-semibold mb-4 text-gray-800">
+        <div class="bg-white rounded-lg shadow-md p-4 sm:p-6">
+            <h3 class="text-lg sm:text-xl font-semibold mb-4 text-gray-800">
                 <i class="fas fa-sliders-h text-purple-500 mr-2"></i>Technical Analysis Settings
             </h3>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
                 <div>
                     <label class="flex items-center">
                         <input type="checkbox" id="showSMA" class="mr-2" checked>
@@ -190,61 +192,61 @@
         </div>
 
         <!-- Enhanced Price Analysis with Technical Indicators -->
-            <div class="bg-white rounded-lg shadow-md p-6">
-                <h3 class="text-xl font-semibold mb-4 text-gray-800">
+            <div class="bg-white rounded-lg shadow-md p-4 sm:p-6">
+                <h3 class="text-lg sm:text-xl font-semibold mb-4 text-gray-800">
                 <i class="fas fa-chart-pie text-blue-500 mr-2"></i>Price Analysis & Key Metrics
                 </h3>
-            <div id="priceAnalysis" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6"></div>
+            <div id="priceAnalysis" class="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mb-4 sm:mb-6"></div>
             
             <!-- Technical Indicators Summary -->
             <div id="technicalIndicators" class="border-t pt-4">
-                <h4 class="font-semibold mb-3 text-gray-700">Technical Indicators</h4>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <h4 class="font-semibold mb-3 text-gray-700 text-sm sm:text-base">Technical Indicators</h4>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
                     <!-- Will be populated with RSI, MACD, etc. -->
                 </div>
                 </div>
             </div>
 
         <!-- Advanced Charting Area -->
-        <div class="grid grid-cols-1 gap-6">
+        <div class="grid grid-cols-1 gap-4 sm:gap-6">
             <!-- Main Chart with Technical Indicators -->
-            <div class="bg-white rounded-lg shadow-md p-6">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-xl font-semibold text-gray-800">
+            <div class="bg-white rounded-lg shadow-md p-4 sm:p-6">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
+                    <h3 class="text-lg sm:text-xl font-semibold text-gray-800">
                         <i class="fas fa-chart-line text-blue-500 mr-2"></i>Price Chart with Technical Analysis
                     </h3>
-                    <div class="flex space-x-2">
-                        <button id="fullscreenChart" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm">
-                            <i class="fas fa-expand mr-1"></i>Fullscreen
+                    <div class="flex gap-2">
+                        <button id="fullscreenChart" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded text-xs sm:text-sm w-full sm:w-auto">
+                            <i class="fas fa-expand mr-1"></i><span class="hidden sm:inline">Fullscreen</span>
                         </button>
-                        <button id="exportChart" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm">
-                            <i class="fas fa-download mr-1"></i>Export
+                        <button id="exportChart" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded text-xs sm:text-sm w-full sm:w-auto">
+                            <i class="fas fa-download mr-1"></i><span class="hidden sm:inline">Export</span>
                         </button>
                     </div>
                 </div>
-                <div class="h-96 relative">
+                <div class="h-64 sm:h-80 lg:h-96 relative">
                     <canvas id="mainChart"></canvas>
                 </div>
             </div>
 
             <!-- Technical Indicators Panel -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                 <!-- RSI Chart -->
-                <div class="bg-white rounded-lg shadow-md p-6">
-                    <h3 class="text-lg font-semibold mb-4 text-gray-800">
+                <div class="bg-white rounded-lg shadow-md p-4 sm:p-6">
+                    <h3 class="text-base sm:text-lg font-semibold mb-4 text-gray-800">
                         <i class="fas fa-chart-area text-orange-500 mr-2"></i>RSI (Relative Strength Index)
                     </h3>
-                    <div class="h-48">
+                    <div class="h-40 sm:h-48">
                         <canvas id="rsiChart"></canvas>
                     </div>
                 </div>
 
                 <!-- MACD Chart -->
-                <div class="bg-white rounded-lg shadow-md p-6">
-                    <h3 class="text-lg font-semibold mb-4 text-gray-800">
+                <div class="bg-white rounded-lg shadow-md p-4 sm:p-6">
+                    <h3 class="text-base sm:text-lg font-semibold mb-4 text-gray-800">
                         <i class="fas fa-chart-bar text-green-500 mr-2"></i>MACD
                     </h3>
-                    <div class="h-48">
+                    <div class="h-40 sm:h-48">
                         <canvas id="macdChart"></canvas>
                     </div>
                 </div>
@@ -252,12 +254,12 @@
         </div>
 
         <!-- Volume Analysis Enhanced -->
-            <div class="bg-white rounded-lg shadow-md p-6">
-                <h3 class="text-xl font-semibold mb-4 text-gray-800">
+            <div class="bg-white rounded-lg shadow-md p-4 sm:p-6">
+                <h3 class="text-lg sm:text-xl font-semibold mb-4 text-gray-800">
                 <i class="fas fa-chart-bar text-orange-500 mr-2"></i>Volume Analysis & Trading Activity
                 </h3>
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div class="h-80">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                <div class="h-64 sm:h-80">
                     <canvas id="volumeChart"></canvas>
                 </div>
                 <div id="volumeMetrics" class="space-y-4">
@@ -267,40 +269,40 @@
         </div>
 
         <!-- Risk Analysis Dashboard -->
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <h3 class="text-xl font-semibold mb-4 text-gray-800">
+        <div class="bg-white rounded-lg shadow-md p-4 sm:p-6">
+            <h3 class="text-lg sm:text-xl font-semibold mb-4 text-gray-800">
                 <i class="fas fa-shield-alt text-red-500 mr-2"></i>Risk Analysis Dashboard
             </h3>
-            <div id="riskAnalysis" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div id="riskAnalysis" class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
                 <!-- Risk metrics will be populated here -->
             </div>
         </div>
 
         <!-- Market Intelligence -->
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <h3 class="text-xl font-semibold mb-4 text-gray-800">
+        <div class="bg-white rounded-lg shadow-md p-4 sm:p-6">
+            <h3 class="text-lg sm:text-xl font-semibold mb-4 text-gray-800">
                 <i class="fas fa-brain text-cyan-500 mr-2"></i>Market Intelligence & Sentiment
             </h3>
-            <div id="marketIntelligence" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div id="marketIntelligence" class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                 <!-- Market intelligence will be populated here -->
             </div>
         </div>
 
         <!-- Company Profile Enhanced -->
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <h3 class="text-xl font-semibold mb-4 text-gray-800">
+        <div class="bg-white rounded-lg shadow-md p-4 sm:p-6">
+            <h3 class="text-lg sm:text-xl font-semibold mb-4 text-gray-800">
                 <i class="fas fa-building text-indigo-500 mr-2"></i>Company Information & Fundamentals
             </h3>
             <div id="companyProfile"></div>
         </div>
 
         <!-- Portfolio analytics placeholder -->
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <h3 class="text-xl font-semibold mb-4 text-gray-800">
+        <div class="bg-white rounded-lg shadow-md p-4 sm:p-6">
+            <h3 class="text-lg sm:text-xl font-semibold mb-4 text-gray-800">
                 <i class="fas fa-briefcase text-green-500 mr-2"></i>Portfolio Analytics
             </h3>
             <div id="portfolioAnalytics">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                     <div class="p-4 bg-gray-50 rounded-lg">
                         <h4 class="font-semibold mb-3 text-gray-700">Portfolio Position</h4>
                         <div class="text-center py-6">
@@ -326,11 +328,11 @@
         </div>
 
         <!-- Export & Reporting -->
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <h3 class="text-xl font-semibold mb-4 text-gray-800">
+        <div class="bg-white rounded-lg shadow-md p-4 sm:p-6">
+            <h3 class="text-lg sm:text-xl font-semibold mb-4 text-gray-800">
                 <i class="fas fa-file-export text-purple-500 mr-2"></i>Export & Reporting
             </h3>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
                 <button id="exportPDF" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md transition duration-200">
                     <i class="fas fa-file-pdf mr-2"></i>PDF Report
                 </button>
@@ -347,12 +349,12 @@
     </div>
 
         <!-- Comprehensive Data (Minimized by default) -->
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-xl font-semibold text-gray-800">
+        <div class="bg-white rounded-lg shadow-md p-4 sm:p-6">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
+                <h3 class="text-lg sm:text-xl font-semibold text-gray-800">
                     <i class="fas fa-database text-purple-500 mr-2"></i>Raw Data & API Response
                 </h3>
-                <button id="toggleRawData" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm">
+                <button id="toggleRawData" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded text-xs sm:text-sm w-full sm:w-auto">
                     <i class="fas fa-eye mr-1"></i>Show/Hide
                 </button>
             </div>
@@ -1031,7 +1033,7 @@
                 const isPositive = change >= 0;
 
                 document.getElementById('realTimeQuote').innerHTML = `
-                    <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-4">
                         <div class="text-center p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg border border-green-200">
                             <div class="text-3xl font-bold text-green-600">$${formatDecimal(price)}</div>
                             <div class="text-sm text-gray-600">Current Price</div>

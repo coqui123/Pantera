@@ -5,76 +5,80 @@
 {% block content %}
 <div class="animate-fade-in">
     <!-- Search Header -->
-    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-        <h1 class="text-3xl font-bold text-gray-800 mb-2">
+    <div class="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-4 sm:mb-6">
+        <h1 class="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">
             <i class="fas fa-search text-blue-500 mr-2"></i>Symbol Management & Search
         </h1>
-        <p class="text-gray-600">Search symbols in database or fetch new ones from Yahoo Finance API</p>
+        <p class="text-sm sm:text-base text-gray-600">Search symbols in database or fetch new ones from Yahoo Finance API</p>
     </div>
 
     <!-- Symbol Lookup & Fetch -->
-    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-        <h2 class="text-xl font-semibold mb-4 text-gray-800">
+    <div class="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-4 sm:mb-6">
+        <h2 class="text-lg sm:text-xl font-semibold mb-4 text-gray-800">
             <i class="fas fa-plus text-green-500 mr-2"></i>Add New Symbol
         </h2>
-        <form id="addSymbolForm" class="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div class="md:col-span-2">
+        <form id="addSymbolForm" class="space-y-4">
+            <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Stock Symbol</label>
                 <input type="text" id="addSymbolInput" placeholder="Enter symbol (e.g., META, AAPL)" 
                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
             </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Data Interval</label>
-                <select id="intervalSelect" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
-                    <option value="1d">1 Day</option>
-                    <option value="1wk">1 Week</option>
-                    <option value="1mo">1 Month</option>
-                </select>
-            </div>
-            <div class="flex items-end">
-                <button type="submit" id="addSymbolBtn" 
-                        class="w-full bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md transition duration-200">
-                    <i class="fas fa-download mr-2"></i>Fetch & Add
-                </button>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Data Interval</label>
+                    <select id="intervalSelect" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+                        <option value="1d">1 Day</option>
+                        <option value="1wk">1 Week</option>
+                        <option value="1mo">1 Month</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button type="submit" id="addSymbolBtn" 
+                            class="w-full bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md transition duration-200">
+                        <i class="fas fa-download mr-2"></i>Fetch & Add
+                    </button>
+                </div>
             </div>
         </form>
         <div id="addSymbolResult" class="mt-4"></div>
     </div>
 
     <!-- Database Search -->
-    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-        <h2 class="text-xl font-semibold mb-4 text-gray-800">
+    <div class="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-4 sm:mb-6">
+        <h2 class="text-lg sm:text-xl font-semibold mb-4 text-gray-800">
             <i class="fas fa-database text-blue-500 mr-2"></i>Search Database
         </h2>
-        <form id="searchForm" class="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div class="md:col-span-2">
+        <form id="searchForm" class="space-y-4">
+            <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Search Query</label>
                 <input type="text" id="searchQuery" placeholder="Search existing symbols in database"
                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Limit</label>
-                <select id="searchLimit" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="10">10 results</option>
-                    <option value="25">25 results</option>
-                    <option value="50">50 results</option>
-                </select>
-            </div>
-            <div class="flex items-end">
-                <button type="submit" id="searchBtn" 
-                        class="w-full bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md transition duration-200">
-                    <i class="fas fa-search mr-2"></i>Search DB
-                </button>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Limit</label>
+                    <select id="searchLimit" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="10">10 results</option>
+                        <option value="25">25 results</option>
+                        <option value="50">50 results</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button type="submit" id="searchBtn" 
+                            class="w-full bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md transition duration-200">
+                        <i class="fas fa-search mr-2"></i>Search DB
+                    </button>
+                </div>
             </div>
         </form>
     </div>
 
     <!-- Popular Symbols -->
-    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-        <h2 class="text-xl font-semibold mb-4 text-gray-800">
+    <div class="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-4 sm:mb-6">
+        <h2 class="text-lg sm:text-xl font-semibold mb-4 text-gray-800">
             <i class="fas fa-star text-yellow-500 mr-2"></i>Quick Add Popular Symbols
         </h2>
-        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
             <button onclick="quickAdd('AAPL')" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-2 rounded-md text-sm font-medium transition duration-200">
                 AAPL
             </button>
@@ -97,12 +101,12 @@
     </div>
 
     <!-- Database Contents -->
-    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-        <div class="flex items-center justify-between mb-4">
-            <h2 class="text-xl font-semibold text-gray-800">
+    <div class="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-4 sm:mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
+            <h2 class="text-lg sm:text-xl font-semibold text-gray-800">
                 <i class="fas fa-list text-purple-500 mr-2"></i>Database Contents
             </h2>
-            <button onclick="loadAllSymbols()" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md text-sm transition duration-200">
+            <button onclick="loadAllSymbols()" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md text-sm transition duration-200 w-full sm:w-auto">
                 <i class="fas fa-refresh mr-1"></i>Refresh
             </button>
         </div>
@@ -116,9 +120,9 @@
 
     <!-- Search Results -->
     <div id="searchResults" class="hidden">
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-xl font-semibold text-gray-800">
+        <div class="bg-white rounded-lg shadow-md p-4 sm:p-6">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-2">
+                <h2 class="text-lg sm:text-xl font-semibold text-gray-800">
                     <i class="fas fa-search-plus text-green-500 mr-2"></i>Search Results
                 </h2>
                 <div id="resultsCount" class="text-sm text-gray-600"></div>
@@ -249,24 +253,24 @@
                 document.getElementById('resultsCount').textContent = `${data.data.length} symbols found`;
                 
                 const resultsHtml = data.data.map(symbol => `
-                    <div class="border border-gray-200 rounded-lg p-4 mb-3 hover:shadow-md transition duration-200">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <h3 class="text-lg font-semibold text-gray-800">${symbol.symbol}</h3>
-                                <p class="text-gray-600">${symbol.name || 'Company name not available'}</p>
-                                <div class="flex items-center space-x-4 mt-2 text-sm text-gray-500">
+                    <div class="border border-gray-200 rounded-lg p-3 sm:p-4 mb-3 hover:shadow-md transition duration-200">
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div class="flex-1">
+                                <h3 class="text-base sm:text-lg font-semibold text-gray-800">${symbol.symbol}</h3>
+                                <p class="text-sm sm:text-base text-gray-600">${symbol.name || 'Company name not available'}</p>
+                                <div class="flex flex-wrap items-center gap-2 sm:gap-4 mt-2 text-xs sm:text-sm text-gray-500">
                                     ${symbol.exchange ? `<span><i class="fas fa-building mr-1"></i>${symbol.exchange}</span>` : ''}
                                     ${symbol.sector ? `<span><i class="fas fa-tags mr-1"></i>${symbol.sector}</span>` : ''}
                                     <span><i class="fas fa-calendar mr-1"></i>Added: ${new Date(symbol.created_at).toLocaleDateString()}</span>
                                 </div>
                             </div>
-                            <div class="flex space-x-2">
+                            <div class="flex flex-col sm:flex-row gap-2 sm:space-x-2">
                                 <a href="/ui/analytics?symbol=${symbol.symbol}" 
-                                   class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm transition duration-200">
+                                   class="bg-blue-500 hover:bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm transition duration-200 text-center">
                                     <i class="fas fa-chart-line mr-1"></i>Analytics
                                 </a>
                                 <button onclick="validateSymbol('${symbol.symbol}')"
-                                        class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md text-sm transition duration-200">
+                                        class="bg-green-500 hover:bg-green-600 text-white px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm transition duration-200">
                                     <i class="fas fa-check mr-1"></i>Validate
                                 </button>
                             </div>
@@ -293,18 +297,18 @@
             if (data.success && data.data.length > 0) {
                 const symbolsHtml = data.data.map(symbol => `
                     <div class="border border-gray-200 rounded-lg p-3 mb-2 hover:shadow-sm transition duration-200">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <h4 class="font-semibold text-gray-800">${symbol.symbol}</h4>
-                                <p class="text-sm text-gray-600">${symbol.name || 'No name available'}</p>
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <div class="flex-1">
+                                <h4 class="font-semibold text-sm sm:text-base text-gray-800">${symbol.symbol}</h4>
+                                <p class="text-xs sm:text-sm text-gray-600">${symbol.name || 'No name available'}</p>
                             </div>
-                            <div class="flex space-x-2">
+                            <div class="flex gap-2">
                                 <a href="/ui/analytics?symbol=${symbol.symbol}" 
-                                   class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs transition duration-200">
+                                   class="bg-blue-500 hover:bg-blue-600 text-white px-2 sm:px-3 py-1 rounded text-xs transition duration-200 text-center flex-1 sm:flex-none">
                                     <i class="fas fa-chart-line mr-1"></i>View
                                 </a>
                                 <button onclick="quickAdd('${symbol.symbol}')"
-                                        class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs transition duration-200">
+                                        class="bg-green-500 hover:bg-green-600 text-white px-2 sm:px-3 py-1 rounded text-xs transition duration-200 flex-1 sm:flex-none">
                                     <i class="fas fa-refresh mr-1"></i>Update
                                 </button>
                             </div>
