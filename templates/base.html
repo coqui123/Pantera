@@ -18,6 +18,14 @@
         .nav-item { position: relative; }
         .nav-item:hover::after { content: ''; position: absolute; bottom: -2px; left: 0; right: 0; height: 2px; background: rgba(255,255,255,0.8); border-radius: 1px; }
         
+        /* Floating/Sticky Navigation */
+        nav.gradient-bg {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        
         /* Mobile Navigation Styles */
         .mobile-menu { display: none; }
         .mobile-menu.active { display: block; }
@@ -54,7 +62,7 @@
 </head>
 <body class="bg-gray-50 min-h-screen">
     <!-- Navigation -->
-    <nav class="gradient-bg shadow-lg relative">
+    <nav class="gradient-bg shadow-lg">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center h-16">
                 <div class="flex items-center">
