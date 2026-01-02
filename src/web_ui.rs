@@ -76,6 +76,14 @@ pub struct LoginTemplate {
 }
 
 #[cfg(feature = "web-ui")]
+#[derive(Template)]
+#[template(path = "backup.html")]
+pub struct BackupTemplate {
+    #[template(escape = "none")]
+    pub asset_version: &'static str,
+}
+
+#[cfg(feature = "web-ui")]
 #[derive(Debug, Deserialize)]
 pub struct AnalyticsQuery {
     pub symbol: Option<String>,
@@ -110,6 +118,42 @@ pub async fn login() -> impl IntoResponse {
     }
 }
 
+#[cfg(feature = "web-ui")]
+pub async fn backup() -> impl IntoResponse {
+    BackupTemplate {
+        asset_version: get_asset_version(),
+    }
+}
+
+/// Serve favicon directly for better browser compatibility
+/// Browsers often request /favicon.ico or /favicon.svg directly
+#[cfg(feature = "web-ui")]
+pub async fn favicon() -> impl IntoResponse {
+    use axum::{
+        http::{header, StatusCode},
+        response::Response,
+    };
+    
+    match tokio::fs::read_to_string("static/favicon.svg").await {
+        Ok(content) => {
+            Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, "image/svg+xml")
+                .header(header::CACHE_CONTROL, format!("public, max-age=31536000, immutable"))
+                .header(header::ETAG, format!("\"{}\"", get_asset_version()))
+                .body(axum::body::Body::from(content))
+                .unwrap()
+        }
+        Err(_) => {
+            // Return 404 if favicon doesn't exist
+            Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(axum::body::Body::empty())
+                .unwrap()
+        }
+    }
+}
+
 /// Middleware to add cache headers for web UI responses
 /// HTML pages: short cache (5 minutes) to allow updates
 /// Static assets: long cache (1 year) with versioning for cache busting
@@ -139,6 +183,7 @@ pub async fn cache_headers_middleware(
                 || content_type_str.contains("application/javascript")
                 || content_type_str.contains("image/")
                 || content_type_str.contains("font/")
+                || content_type_str.contains("image/svg+xml")
             {
                 // Static assets: long cache with versioning
                 // Since we version assets, they can be cached forever

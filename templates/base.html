@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Mango Data Service - Admin Panel{% endblock %}</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v={{ asset_version }}">
+    <link rel="alternate icon" href="/static/favicon.svg?v={{ asset_version }}">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css?v={{ asset_version }}" rel="stylesheet" crossorigin="anonymous">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css?v={{ asset_version }}" rel="stylesheet" crossorigin="anonymous">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js?v={{ asset_version }}" crossorigin="anonymous"></script>
@@ -84,6 +87,9 @@
                     <a href="/ui/analytics" class="nav-item text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium transition duration-200">
                         <i class="fas fa-chart-bar mr-1"></i><span class="hidden lg:inline">Analytics</span>
                     </a>
+                    <a href="/ui/backup" class="nav-item text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium transition duration-200">
+                        <i class="fas fa-database mr-1"></i><span class="hidden lg:inline">Backup</span>
+                    </a>
                     <div class="border-l border-white border-opacity-30 h-6 mx-2 hidden md:block"></div>
                     <a href="/health" target="_blank" class="nav-item text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium transition duration-200 hidden md:inline-flex">
                         <i class="fas fa-heartbeat mr-1"></i><span class="hidden lg:inline">API Health</span>
@@ -110,6 +116,9 @@
             </a>
             <a href="/ui/analytics" class="nav-item text-white hover:bg-white hover:bg-opacity-20 block" onclick="toggleMobileMenu()">
                 <i class="fas fa-chart-bar mr-2"></i>Analytics
+            </a>
+            <a href="/ui/backup" class="nav-item text-white hover:bg-white hover:bg-opacity-20 block" onclick="toggleMobileMenu()">
+                <i class="fas fa-database mr-2"></i>Backup
             </a>
             <div class="border-t border-white border-opacity-30 my-2"></div>
             <a href="/health" target="_blank" class="nav-item text-white hover:bg-white hover:bg-opacity-20 block" onclick="toggleMobileMenu()">

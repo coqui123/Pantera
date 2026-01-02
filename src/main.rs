@@ -12,6 +12,7 @@ use tower::ServiceBuilder;
 use tower_http::{
     cors::CorsLayer,
     trace::TraceLayer,
+    services::ServeDir,
 };
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -39,7 +40,7 @@ use handlers::{
     get_extended_quote_data, handler_404, cleanup_cache,
     get_technical_indicators, compare_symbols,
     get_portfolio, add_portfolio_holding, update_portfolio_holding,
-    delete_portfolio_holding, update_portfolio_prices, AppState,
+    delete_portfolio_holding, update_portfolio_prices, download_backup, AppState,
 };
 use yahoo_service::YahooFinanceService;
 
@@ -208,11 +209,20 @@ async fn main() -> Result<()> {
     {
         use axum::middleware;
         
+        // Serve static files (favicon, etc.) with proper cache headers
+        let static_files = Router::new()
+            .route("/favicon.svg", get(web_ui::favicon))
+            .route("/favicon.ico", get(web_ui::favicon))
+            .nest_service("/static", ServeDir::new("static"))
+            .layer(middleware::from_fn(web_ui::cache_headers_middleware));
+        
         // Create protected routes with auth middleware and cache headers
         let protected_routes = Router::new()
             .route("/ui", get(web_ui::dashboard))
             .route("/ui/search", get(web_ui::search))
             .route("/ui/analytics", get(web_ui::analytics))
+            .route("/ui/backup", get(web_ui::backup))
+            .route("/api/backup/download", get(download_backup))
             .route("/", get(web_ui::dashboard)) // Root redirects to dashboard
             .route_layer(middleware::from_fn_with_state(
                 app_state.clone(),
@@ -225,7 +235,10 @@ async fn main() -> Result<()> {
             .route("/login", get(web_ui::login))
             .layer(middleware::from_fn(web_ui::cache_headers_middleware));
         
-        app = app.merge(protected_routes).merge(login_route);
+        app = app
+            .merge(static_files)
+            .merge(protected_routes)
+            .merge(login_route);
     }
         
     // Add basic API info route when web-ui is disabled

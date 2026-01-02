@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+
+{% block title %}Database Backup - Mango Data Service{% endblock %}
+
+{% block content %}
+<div class="animate-fade-in">
+    <!-- Header Section -->
+    <div class="gradient-bg rounded-lg shadow-xl p-4 sm:p-6 lg:p-8 mb-6 sm:mb-8 text-white">
+        <div class="max-w-4xl mx-auto text-center">
+            <h1 class="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 sm:mb-4">
+                <i class="fas fa-database mr-2"></i>Database Backup
+            </h1>
+            <p class="text-base sm:text-lg lg:text-xl mb-4 sm:mb-6">
+                Download a complete backup of your database
+            </p>
+        </div>
+    </div>
+
+    <!-- Backup Information Card -->
+    <div class="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-6 sm:mb-8">
+        <div class="flex items-start mb-4">
+            <div class="flex-shrink-0">
+                <i class="fas fa-info-circle text-blue-500 text-2xl mr-3"></i>
+            </div>
+            <div class="flex-1">
+                <h2 class="text-xl sm:text-2xl font-semibold text-gray-800 mb-2">About Database Backups</h2>
+                <p class="text-gray-600 mb-4">
+                    A database backup contains all your financial data including:
+                </p>
+                <ul class="list-disc list-inside text-gray-600 space-y-2 mb-4">
+                    <li>Symbol information and metadata</li>
+                    <li>Historical price data</li>
+                    <li>Real-time quotes</li>
+                    <li>Company profiles</li>
+                    <li>Portfolio holdings</li>
+                </ul>
+                <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-exclamation-triangle text-yellow-400"></i>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm text-yellow-700">
+                                <strong>Important:</strong> The backup file is a complete SQLite database that can be restored by replacing the current database file. 
+                                Make sure to keep your backups in a safe location.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Download Section -->
+    <div class="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-6 sm:mb-8">
+        <h2 class="text-xl sm:text-2xl font-semibold text-gray-800 mb-4">
+            <i class="fas fa-download text-green-500 mr-2"></i>Download Backup
+        </h2>
+        <p class="text-gray-600 mb-6">
+            Click the button below to download a complete backup of your database. 
+            The file will be named with a timestamp for easy identification.
+        </p>
+        
+        <div class="flex flex-col sm:flex-row gap-4">
+            <a 
+                href="/api/backup/download" 
+                id="downloadBackupBtn"
+                class="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-md text-base font-medium transition duration-200 flex items-center justify-center"
+                onclick="handleDownload(event)"
+            >
+                <i class="fas fa-download mr-2"></i>
+                <span>Download Database Backup</span>
+            </a>
+            
+            <button 
+                onclick="checkDatabaseSize()" 
+                id="checkSizeBtn"
+                class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-md text-base font-medium transition duration-200 flex items-center justify-center"
+            >
+                <i class="fas fa-info-circle mr-2"></i>
+                <span>Check Database Size</span>
+            </button>
+        </div>
+        
+        <div id="sizeInfo" class="mt-4 hidden">
+            <div class="bg-gray-50 rounded-lg p-4">
+                <p class="text-sm text-gray-600">
+                    <i class="fas fa-spinner fa-spin mr-2"></i>
+                    <span id="sizeText">Checking database size...</span>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Restore Instructions -->
+    <div class="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-6 sm:mb-8">
+        <h2 class="text-xl sm:text-2xl font-semibold text-gray-800 mb-4">
+            <i class="fas fa-upload text-purple-500 mr-2"></i>How to Restore a Backup
+        </h2>
+        <div class="bg-gray-50 rounded-lg p-4 sm:p-6">
+            <ol class="list-decimal list-inside space-y-3 text-gray-700">
+                <li>Stop the Mango Data Service application</li>
+                <li>Locate your current database file (usually at <code class="bg-gray-200 px-2 py-1 rounded">data/data.db</code>)</li>
+                <li>Rename or move the current database file as a backup</li>
+                <li>Copy your downloaded backup file to the database location</li>
+                <li>Rename the backup file to match the original database filename (<code class="bg-gray-200 px-2 py-1 rounded">data.db</code>)</li>
+                <li>Restart the Mango Data Service application</li>
+            </ol>
+            <div class="mt-4 p-3 bg-red-50 border-l-4 border-red-400">
+                <p class="text-sm text-red-700">
+                    <strong>Warning:</strong> Restoring a backup will replace all current data with the data from the backup. 
+                    Make sure you have a current backup before restoring an older one.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Database Statistics -->
+    <div class="bg-white rounded-lg shadow-md p-4 sm:p-6">
+        <h2 class="text-xl sm:text-2xl font-semibold text-gray-800 mb-4">
+            <i class="fas fa-chart-bar text-indigo-500 mr-2"></i>Current Database Statistics
+        </h2>
+        <div id="dbStats" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="text-center py-4">
+                <div class="loading mx-auto mb-2"></div>
+                <p class="text-sm text-gray-500">Loading statistics...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Handle download with loading state
+    function handleDownload(event) {
+        const btn = document.getElementById('downloadBackupBtn');
+        const originalHTML = btn.innerHTML;
+        
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Preparing download...';
+        btn.classList.add('opacity-75', 'cursor-not-allowed');
+        btn.style.pointerEvents = 'none';
+        
+        // The download will start automatically via the link
+        // Reset button after a short delay
+        setTimeout(() => {
+            btn.innerHTML = originalHTML;
+            btn.classList.remove('opacity-75', 'cursor-not-allowed');
+            btn.style.pointerEvents = 'auto';
+        }, 3000);
+    }
+
+    // Check database size
+    async function checkDatabaseSize() {
+        const btn = document.getElementById('checkSizeBtn');
+        const sizeInfo = document.getElementById('sizeInfo');
+        const sizeText = document.getElementById('sizeText');
+        
+        const originalHTML = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Checking...';
+        btn.disabled = true;
+        
+        sizeInfo.classList.remove('hidden');
+        sizeText.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Checking database size...';
+        
+        try {
+            // Get database stats to estimate size
+            const response = await fetch('/api/stats');
+            const data = await response.json();
+            
+            if (data.success) {
+                const stats = data.data;
+                const totalRecords = (stats.symbols_count || 0) + 
+                                   (stats.historical_records_count || 0) + 
+                                   (stats.realtime_quotes_count || 0) + 
+                                   (stats.company_profiles_count || 0);
+                
+                sizeText.innerHTML = `
+                    <i class="fas fa-database mr-2"></i>
+                    Database contains approximately <strong>${totalRecords.toLocaleString()}</strong> records across all tables.
+                    <br>
+                    <span class="text-xs text-gray-500 mt-2 block">
+                        Symbols: ${(stats.symbols_count || 0).toLocaleString()} | 
+                        Historical: ${(stats.historical_records_count || 0).toLocaleString()} | 
+                        Quotes: ${(stats.realtime_quotes_count || 0).toLocaleString()} | 
+                        Profiles: ${(stats.company_profiles_count || 0).toLocaleString()}
+                    </span>
+                `;
+            } else {
+                sizeText.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i>Could not retrieve database statistics.';
+            }
+        } catch (error) {
+            sizeText.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i>Error checking database size.';
+            console.error('Error:', error);
+        } finally {
+            btn.innerHTML = originalHTML;
+            btn.disabled = false;
+        }
+    }
+
+    // Load database statistics on page load
+    async function loadDatabaseStats() {
+        try {
+            const response = await fetch('/api/stats');
+            const data = await response.json();
+            
+            if (data.success) {
+                const stats = data.data;
+                const statsContainer = document.getElementById('dbStats');
+                
+                statsContainer.innerHTML = `
+                    <div class="bg-blue-50 rounded-lg p-4 text-center">
+                        <div class="text-2xl font-bold text-blue-600">${(stats.symbols_count || 0).toLocaleString()}</div>
+                        <div class="text-sm text-gray-600 mt-1">Symbols</div>
+                    </div>
+                    <div class="bg-green-50 rounded-lg p-4 text-center">
+                        <div class="text-2xl font-bold text-green-600">${(stats.historical_records_count || 0).toLocaleString()}</div>
+                        <div class="text-sm text-gray-600 mt-1">Historical Records</div>
+                    </div>
+                    <div class="bg-yellow-50 rounded-lg p-4 text-center">
+                        <div class="text-2xl font-bold text-yellow-600">${(stats.realtime_quotes_count || 0).toLocaleString()}</div>
+                        <div class="text-sm text-gray-600 mt-1">Real-time Quotes</div>
+                    </div>
+                    <div class="bg-purple-50 rounded-lg p-4 text-center">
+                        <div class="text-2xl font-bold text-purple-600">${(stats.company_profiles_count || 0).toLocaleString()}</div>
+                        <div class="text-sm text-gray-600 mt-1">Company Profiles</div>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('Error loading database stats:', error);
+            const statsContainer = document.getElementById('dbStats');
+            statsContainer.innerHTML = `
+                <div class="col-span-full text-center py-4">
+                    <i class="fas fa-exclamation-triangle text-yellow-500 mr-2"></i>
+                    <span class="text-gray-600">Could not load database statistics</span>
+                </div>
+            `;
+        }
+    }
+
+    // Load stats when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        loadDatabaseStats();
+    });
+</script>
+{% endblock %}
+

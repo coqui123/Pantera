@@ -2161,4 +2161,71 @@ pub async fn cleanup_cache(
     });
     
     Ok(Json(ApiResponse::success(response)))
+}
+
+// Database backup download endpoint
+pub async fn download_backup(
+    State(app_state): State<AppState>,
+) -> Result<axum::response::Response, StatusCode> {
+    use axum::{
+        http::{header, StatusCode},
+        response::Response,
+    };
+    
+    // Extract database file path from database URL
+    let db_url = &app_state.config.database.url;
+    let db_path = if db_url.starts_with("sqlite:///") {
+        db_url.strip_prefix("sqlite:///").unwrap_or(db_url)
+    } else if db_url.starts_with("sqlite:") {
+        db_url.strip_prefix("sqlite:").unwrap_or(db_url)
+    } else {
+        error!("Invalid database URL format: {}", db_url);
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    };
+    
+    // Remove query parameters if present (e.g., ?mode=rwc)
+    let db_path = db_path.split('?').next().unwrap_or(db_path);
+    
+    // Check if file exists
+    if !std::path::Path::new(db_path).exists() {
+        error!("Database file not found at path: {}", db_path);
+        return Err(StatusCode::NOT_FOUND);
+    }
+    
+    // Read the database file
+    match tokio::fs::read(db_path).await {
+        Ok(data) => {
+            if data.is_empty() {
+                error!("Database file is empty: {}", db_path);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+            
+            // Generate filename with timestamp
+            let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+            let filename = format!("mango_data_backup_{}.db", timestamp);
+            
+            info!("Serving database backup: {} ({} bytes)", filename, data.len());
+            
+            // Create response with file download headers
+            let response = Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, "application/octet-stream")
+                .header(
+                    header::CONTENT_DISPOSITION,
+                    format!("attachment; filename=\"{}\"", filename),
+                )
+                .header(header::CONTENT_LENGTH, data.len())
+                .body(axum::body::Body::from(data))
+                .map_err(|e| {
+                    error!("Failed to create response: {}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+            
+            Ok(response)
+        }
+        Err(e) => {
+            error!("Failed to read database file for backup: {} (path: {})", e, db_path);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
 } 
